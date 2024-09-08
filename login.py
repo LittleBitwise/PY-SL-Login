@@ -1,5 +1,7 @@
-import hashlib, xmlrpc
-import xmlrpc.client
+import hashlib, xmlrpc, logging
+
+logging.basicConfig(level=logging.DEBUG, format='\n\t%(levelname)s\t%(message)s\n')
+log = logging.getLogger()
 
 def login(first: str, last: str, password: str):
 	params = {
@@ -22,10 +24,12 @@ def login(first: str, last: str, password: str):
 		'options': [],
 	}
 
+	log.debug(params)
+
 	uri = 'https://login.agni.lindenlab.com/cgi-bin/login.cgi'
 	proxy = xmlrpc.client.ServerProxy(uri)
 	return proxy.login_to_simulator(params)
 
 result = login("first", "last", "password")
 
-print(result)
+log.info(result)
