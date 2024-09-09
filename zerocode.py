@@ -8,13 +8,8 @@ def encode(input: bytes) -> bytes:
 	out = bytearray()
 	i, n = 0, len(input)
 	while i < n: # While-loop for index skipping.
-		if input[i] == 0x00:
-			# Look ahead from current index.
-			# Find first nonzero byte.
-			# Use that index as length.
-			zeroes = 1
-			while (i + zeroes < n) and input[i + zeroes] == 0x00:
-				zeroes += 1;
+		if (zeroes := (input[i] == 0x00)):
+			while (i + zeroes < n) and input[i + zeroes] == 0x00: zeroes += 1
 			out.extend([0x00, zeroes])
 			i += zeroes
 		else:
