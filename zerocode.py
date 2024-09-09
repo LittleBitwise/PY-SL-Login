@@ -35,11 +35,10 @@ def decode(input: bytes) -> bytes:
 				i += 1
 	return bytes(out, encoding='ASCII')
 
-# For testing
-def str2bin(s: str) -> str:
-	return ' '.join('{0:08b}'.format(c, 'b') for c in s)
-
 def debug():
+	def str2bin(s: str) -> str:
+		return ' '.join('{0:08b}'.format(c, 'b') for c in s)
+
 	def test(s):
 		print('original', s)
 		print('encoded ', out := encode(s))
