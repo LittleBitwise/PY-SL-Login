@@ -8,31 +8,30 @@ def encode(input: bytes) -> bytes:
 	out = bytearray()
 	i, n = 0, len(input)
 	while i < n: # While-loop for index skipping.
-		match _ := input[i]:
-			case 0x00:
-				# Look ahead from current index.
-				# Find next nonzero byte.
-				# Use that index as length.
-				v = memoryview(input); v_len = len(v[i:])
-				zeroes = next((x for x, byte in enumerate(v[i:]) if byte != 0x00), v_len)
-				out.extend([0x00, zeroes])
-				i += zeroes
-			case byte:
-				out.append(byte)
-				i += 1
+		if input[i] == 0x00:
+			# Look ahead from current index.
+			# Find first nonzero byte.
+			# Use that index as length.
+			zeroes = 1
+			while (i + zeroes < n) and input[i + zeroes] == 0x00:
+				zeroes += 1;
+			out.extend([0x00, zeroes])
+			i += zeroes
+		else:
+			out.append(input[i])
+			i += 1
 	return bytes(out)
 
 def decode(input: bytes) -> bytes:
 	out = bytearray()
 	i, n = 0, len(input)
 	while i < n: # While-loop for index skipping.
-		match _ := input[i]:
-			case 0x00:
-				out.extend(b'\0' * input[i + 1])
-				i += 2
-			case byte:
-				out.append(byte)
-				i += 1
+		if input[i] == 0x00:
+			out.extend(b'\0' * input[i + 1])
+			i += 2 # Assumes input was valid.
+		else:
+			out.append(input[i])
+			i += 1
 	return bytes(out)
 
 def debug():
