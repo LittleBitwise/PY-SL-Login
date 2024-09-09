@@ -5,35 +5,35 @@
 #               ^^^^-- count (255)
 
 def encode(input: bytes) -> bytes:
-	out = ''
+	out = bytearray()
 	i, n = 0, len(input)
-	while i < n: # While-loop for next-byte access.
+	while i < n: # While-loop for index skipping.
 		match _ := input[i]:
 			case 0x00:
 				# Look ahead from current index.
 				# Find next nonzero byte.
-				# Use index as length.
+				# Use that index as length.
 				v = memoryview(input[i:]);
 				zeroes = next((x for x, byte in enumerate(v) if byte != 0x00), len(v))
-				out += '\0' + chr(zeroes)
+				out.extend([0x00, zeroes])
 				i += zeroes
-			case b:
-				out += chr(b)
+			case byte:
+				out.append(byte)
 				i += 1
-	return bytes(out, encoding='ASCII')
+	return bytes(out)
 
 def decode(input: bytes) -> bytes:
-	out = ''
+	out = bytearray()
 	i, n = 0, len(input)
-	while i < n: # While-loop for next-byte access.
+	while i < n: # While-loop for index skipping.
 		match _ := input[i]:
 			case 0x00:
-				out += '\0' * input[i + 1]
+				out.extend(b'\0' * input[i + 1])
 				i += 2
 			case byte:
-				out += chr(byte)
+				out.append(byte)
 				i += 1
-	return bytes(out, encoding='ASCII')
+	return bytes(out)
 
 def debug():
 	def str2bin(s: str) -> str:
@@ -49,3 +49,6 @@ def debug():
 	test('0123 \x00\x00\x00\x00 456'.encode())
 	test('\x00\x00\x00\x00'.encode())
 	test('\x00\x00\x00\x00\x01'.encode())
+	test('\x7f\x00\x7f'.encode())
+	test(b'\0' * 255)
+	test(bytes.fromhex('FF 00 FF'))
