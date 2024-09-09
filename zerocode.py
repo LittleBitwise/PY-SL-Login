@@ -13,8 +13,8 @@ def encode(input: bytes) -> bytes:
 				# Look ahead from current index.
 				# Find next nonzero byte.
 				# Use that index as length.
-				v = memoryview(input[i:]); v_len = len(v)
-				zeroes = next((x for x, byte in enumerate(v) if byte != 0x00), v_len)
+				v = memoryview(input); v_len = len(v[i:])
+				zeroes = next((x for x, byte in enumerate(v[i:]) if byte != 0x00), v_len)
 				out.extend([0x00, zeroes])
 				i += zeroes
 			case byte:
