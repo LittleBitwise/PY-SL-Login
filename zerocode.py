@@ -61,6 +61,26 @@ def byte2id(input: bytes, encoded: bool=False) -> tuple[int, str]:
 	elif 0x00000001 <= id <= 0x000000FE: return (id & 0x00FF, 'High')
 	raise Exception(f'{input} contained invalid message {id} ({hex(id)})')
 
+def packet2human(input: bytes) -> str:
+	"""
+	Converts bytes into formatted string `'[123] {Low 123} +123 Resent Reliable Encoded Acknowledge'`
+	"""
+	flags = input[0]
+	sequence = int.from_bytes(input[1:5])
+	extra = input[5]
+	(mID, mHZ) = byte2id(input[6:12])
+
+	out = ''.join(f'[{sequence}] ({mHZ} {mID}) +{extra}')
+	if bool(flags & 0x20): out += ' Resent'
+	if bool(flags & 0x40): out += ' Reliable'
+	if bool(flags & 0x80): out += ' Encoded'
+	if bool(flags & 0x10): out += ' Acknowledge'
+	return out
+
+def reliable(input: bytes) -> bool:
+	return bool(input[0] & 0x40)
+
+
 def debug_zeros():
 	def str2bin(s: str) -> str:
 		return ' '.join('{0:08b}'.format(c, 'b') for c in s)
