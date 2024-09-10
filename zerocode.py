@@ -32,19 +32,20 @@ def decode(input: bytes) -> bytes:
 
 def hex2byte(input: str) -> bytes:
 	"""
-	Converts string in format `'AA BB CC DD'` into bytes. Spaces are ignored.
+	Converts formatted string `'AA BB CC DD'` into bytes. Spaces are ignored.
 	"""
 	return bytes.fromhex(input.replace(' ',''))
 
 def byte2hex(input: bytes) -> str:
 	"""
-	Converts bytes into string in format `'AA BB CC DD'`.
+	Converts bytes into formatted string `'AA BB CC DD'`.
 	"""
 	return ' '.join(f'{byte:02X}' for byte in input)
 
 def byte2id(input: bytes, encoded: bool=False) -> tuple[int, str]:
 	"""
 	Converts message body into message ID and message frequency.
+	**Be sure to pass enough bytes to decode message ID.**
 	"""
 	if encoded: input = decode(input)
 	if    input.startswith(b'\xff\xff\xff'): input = input[:4]
