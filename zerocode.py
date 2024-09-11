@@ -1,3 +1,5 @@
+import packet
+
 def encode(input: bytes) -> bytes:
 	"""
 	Zero-bytes are run-length encoded so that up to 255 zeroes become `\\x00\\xff`
@@ -48,45 +50,6 @@ def byte2hex(input: bytes) -> str:
 	"""
 	return ' '.join(f'{byte:02X}' for byte in input)
 
-def byte2id(input: bytes, encoded: bool=False) -> tuple[int, str]:
-	"""
-	Converts message body into message ID and message frequency.
-	**Be sure to pass enough bytes to decode message ID.**
-	"""
-	if encoded: input = decode(input)
-	if    input.startswith(b'\xff\xff\xff'): input = input[:4]
-	elif  input.startswith(b'\xff\xff'): input = input[:4]
-	elif  input.startswith(b'\xff'): input = input[:2]
-	else: input = input[:1]
-
-	id = int.from_bytes(input)
-
-	if   0xFFFFFFFA <= id <= 0xFFFFFFFF: return (id, 'Fixed')
-	elif 0xFFFF0001 <= id <= 0xFFFFFFF9: return (id & 0xFFFF, 'Low')
-	elif 0x0000FF01 <= id <= 0x0000FFFE: return (id & 0x00FF, 'Medium')
-	elif 0x00000001 <= id <= 0x000000FE: return (id & 0x00FF, 'High')
-	raise Exception(f'{input} contained invalid message {id} ({hex(id)})')
-
-def packet2human(input: bytes) -> str:
-	"""
-	Converts bytes into formatted string `'[123] {Low 123} +123 Resent Reliable Encoded Acknowledge'`
-	"""
-	flags = input[0]
-	sequence = int.from_bytes(input[1:5])
-	extra = input[5]
-	(mID, mHZ) = byte2id(input[6:12])
-
-	out = ''.join(f'[{sequence}] ({mHZ} {mID}) +{extra}')
-	if bool(flags & 0x20): out += ' Resent'
-	if bool(flags & 0x40): out += ' Reliable'
-	if bool(flags & 0x80): out += ' Encoded'
-	if bool(flags & 0x10): out += ' Acknowledge'
-	return out
-
-def reliable(input: bytes) -> bool:
-	return bool(input[0] & 0x40)
-
-
 def debug_zeros():
 	def str2bin(s: str) -> str:
 		return ' '.join('{0:08b}'.format(c, 'b') for c in s)
@@ -113,7 +76,7 @@ def debug_bytes():
 			rel := bool(flags & (reliable := 0x40)),
 			res := bool(flags & (resended := 0x20)),
 			ack := bool(flags & (acknowle := 0x10)),
-			byte2id(data[6:12], zer)
+			packet.message_id_from_bytes(data[6:12], zer)
 		])
 	#  Extra header byte ↓  ↓ Packet body (might be zero-encoded)
 	#     0  1           5  6
