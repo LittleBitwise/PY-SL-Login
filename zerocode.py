@@ -14,6 +14,12 @@ def encode(input: bytes) -> bytes:
 			i += 1
 	return bytes(out)
 
+def encode_all(*args: bytes) -> bytes:
+	"""
+	Calls `packet.encode()` on each argument containing `bytes`.
+	"""
+	return bytes(bytearray().join(encode(arg) for arg in args if isinstance(arg, bytes)))
+
 def decode(input: bytes) -> bytes:
 	"""
 	Converts bytes where zeroes are run-length encoded,
