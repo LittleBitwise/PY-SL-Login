@@ -26,56 +26,12 @@ client.send(
 	client.circuit_code_bytes,
 )
 
-log.debug('AgentUpdate')
-client.send(
-	packet.header(packet.AgentUpdate, client.sequence, packet.ZEROCODED),
-	client.agent_id_bytes,
-	client.session_id_bytes,
-	packet.zero_rot_bytes,
-	packet.zero_rot_bytes,
-	packet.zero_1_bytes, # state
-	packet.zero_vec_bytes,
-	packet.zero_vec_bytes,
-	packet.zero_vec_bytes,
-	packet.zero_vec_bytes,
-	packet.zero_f_bytes,
-	packet.zero_4_bytes, # inputs
-	packet.zero_1_bytes, # flags
-)
-
-log.debug('UUIDNameRequest')
-client.send(
-	packet.header(packet.UUIDNameRequest, client.sequence),
-	struct.pack('>B', 1),
-	client.agent_id_bytes,
-)
-
 # Main connection loop.
 
 while data := client.recv():
 	log.debug(f'{packet.human_header(data)}\n\tUDP: {zerocode.byte2hex(data)}')
 
-	if packet.is_reliable(data):
-		message_number = packet.sequence(data)
-		log.debug(f'ACK [{client.sequence}] {message_number}')
-		client.send(
-			packet.header(packet.PacketAck, client.sequence),
-			struct.pack('>B', 1),
-			struct.pack('<L', message_number),
-		)
-		continue
-
 	(mID, mHZ) = packet.message_id_from_bytes(data[packet.MESSAGE_BODY_BYTE:], packet.is_zerocoded(data))
-
-	if (mID, mHZ) == (1, 'High'):
-		(pingID, unAck) = struct.unpack('<BI', data[7:12])
-		log.debug(f'StartPingCheck [{client.sequence}] {packet.sequence(data[:packet.MESSAGE_BODY_BYTE])} pingID:{pingID}, last unACK:{unAck}')
-		log.debug('CompletePingCheck')
-		client.send(
-			packet.header(packet.CompletePingCheck, client.sequence),
-			bytes([pingID])
-		)
-		continue
 
 	if (mID, mHZ) == (148, 'Low'):
 		log.debug('RegionHandshakeReply')
@@ -89,18 +45,36 @@ while data := client.recv():
 			packet.header(packet.AgentUpdate, client.sequence, packet.ZEROCODED),
 			client.agent_id_bytes,
 			client.session_id_bytes,
-			packet.zero_rot_bytes,
-			packet.zero_rot_bytes,
-			packet.zero_1_bytes, # state
-			packet.zero_vec_bytes,
-			packet.zero_vec_bytes,
-			packet.zero_vec_bytes,
-			packet.zero_vec_bytes,
-			packet.zero_f_bytes,
-			packet.zero_4_bytes, # inputs
-			packet.zero_1_bytes, # flags
+			packet.zero_rot_bytes, # BodyRotation
+			packet.zero_rot_bytes, # HeadRotation
+			packet.zero_1_bytes, # State
+			packet.zero_vec_bytes, # CameraCenter
+			packet.zero_vec_bytes, # CameraAtAxis
+			packet.zero_vec_bytes, # CameraLeftAxis
+			packet.zero_vec_bytes, # CameraUpAxis
+			packet.zero_f_bytes, # Far
+			packet.zero_4_bytes, # ControlFlags
+			packet.zero_1_bytes, # Flags
 		)
-		break
-	pass
+		continue
+
+	if (mID, mHZ) == (1, 'High'):
+		(pingID, unAck) = struct.unpack('<BI', data[7:12])
+		log.debug(f'StartPingCheck [{client.sequence}] {packet.sequence(data[:packet.MESSAGE_BODY_BYTE])} pingID:{pingID}, last unACK:{unAck}')
+		client.send(
+			packet.header(packet.CompletePingCheck, client.sequence),
+			bytes([pingID])
+		)
+		continue
+
+	if packet.is_reliable(data):
+		message_number = packet.sequence(data)
+		log.debug(f'ACK [{client.sequence}] {message_number}')
+		client.send(
+			packet.header(packet.PacketAck, client.sequence),
+			struct.pack('>B', 1),
+			struct.pack('<L', message_number),
+		)
+		continue
 
 log.debug('UDP connection closed, no data received.')
