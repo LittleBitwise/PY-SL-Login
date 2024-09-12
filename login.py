@@ -2,7 +2,7 @@ import logging
 import struct # UDP communication
 import zerocode, packet # local
 
-logging.basicConfig(level=logging.DEBUG, format='\n\t%(levelname)s\t%(message)s\n', filename='dump.log')
+logging.basicConfig(level=logging.DEBUG, format='\t%(levelname)s\t%(message)s\n', filename='dump.log')
 log = logging.getLogger()
 
 client = packet.client()
@@ -12,7 +12,7 @@ log.info(client.login('firstname', 'lastname', 'password'))
 
 log.debug('UseCircuitCode')
 client.send(
-	packet.header(0xffff0003, 1),
+	packet.header(packet.UseCircuitCode, client.sequence),
 	client.circuit_code_bytes,
 	client.session_id_bytes,
 	client.agent_id_bytes,
@@ -20,49 +20,73 @@ client.send(
 
 log.debug('CompleteAgentMovement')
 client.send(
-	packet.header(0xffff00f9, 2),
+	packet.header(packet.CompleteAgentMovement, client.sequence),
 	client.agent_id_bytes,
 	client.session_id_bytes,
 	client.circuit_code_bytes,
 )
 
+log.debug('AgentUpdate')
+client.send(
+	packet.header(packet.AgentUpdate, client.sequence, packet.ZEROCODED),
+	client.agent_id_bytes,
+	client.session_id_bytes,
+	packet.zero_rot_bytes,
+	packet.zero_rot_bytes,
+	packet.zero_1_bytes, # state
+	packet.zero_vec_bytes,
+	packet.zero_vec_bytes,
+	packet.zero_vec_bytes,
+	packet.zero_vec_bytes,
+	packet.zero_f_bytes,
+	packet.zero_4_bytes, # inputs
+	packet.zero_1_bytes, # flags
+)
+
 log.debug('UUIDNameRequest')
 client.send(
-	packet.header(0xffff00eb, 4),
+	packet.header(packet.UUIDNameRequest, client.sequence),
+	struct.pack('>B', 1),
 	client.agent_id_bytes,
 )
 
 # Main connection loop.
 
-sequence = 5
 while data := client.recv():
-	log.debug(f'{zerocode.packet2human(data[0:12])}\n\tUDP: {zerocode.byte2hex(data)}')
+	log.debug(f'{packet.human_header(data)}\n\tUDP: {zerocode.byte2hex(data)}')
 
-	if zerocode.reliable(data):
-		message_number = int.from_bytes(data[1:5])
-		log.debug(f'ACK {message_number}')
-		sequence += 1
+	if packet.is_reliable(data):
+		message_number = packet.sequence(data)
+		log.debug(f'ACK [{client.sequence}] {message_number}')
 		client.send(
-			packet.header(0xfffffffb, sequence),
+			packet.header(packet.PacketAck, client.sequence),
 			struct.pack('>B', 1),
 			struct.pack('<L', message_number),
 		)
 		continue
 
-	(mID, mHZ) = zerocode.byte2id(data[6:12])
+	(mID, mHZ) = packet.message_id_from_bytes(data[packet.MESSAGE_BODY_BYTE:], packet.is_zerocoded(data))
 
-	if (mID, mHZ) == (148, 'Low'): # RegionHandshake
-		log.debug('RegionHandshakeReply')
-		sequence += 1
+	if (mID, mHZ) == (1, 'High'):
+		(pingID, unAck) = struct.unpack('<BI', data[7:12])
+		log.debug(f'StartPingCheck [{client.sequence}] {packet.sequence(data[:packet.MESSAGE_BODY_BYTE])} pingID:{pingID}, last unACK:{unAck}')
+		log.debug('CompletePingCheck')
 		client.send(
-			packet.header(0xffff0095, sequence),
+			packet.header(packet.CompletePingCheck, client.sequence),
+			bytes([pingID])
+		)
+		continue
+
+	if (mID, mHZ) == (148, 'Low'):
+		log.debug('RegionHandshakeReply')
+		client.send(
+			packet.header(packet.RegionHandshakeReply, client.sequence),
 			zerocode.encode_all(client.agent_id_bytes, client.session_id_bytes),
 		)
 
 		log.debug('AgentUpdate')
-		sequence += 1
 		client.send(
-			packet.header(0x04, 3),
+			packet.header(packet.AgentUpdate, client.sequence, packet.ZEROCODED),
 			client.agent_id_bytes,
 			client.session_id_bytes,
 			packet.zero_rot_bytes,
