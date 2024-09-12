@@ -8,23 +8,51 @@ RELIABLE    = 0x40
 RESENT      = 0x20
 ACKNOWLEDGE = 0x10
 
+FIXED  = 0xffffff00
+LOW    = 0xffff0000
+MEDIUM = 0xff000000
+HIGH   = 0x00000000
+
+MESSAGE_BODY_BYTE = 6
+FIXED_BYTES  = 4
+LOW_BYTES    = 4
+MEDIUM_BYTES = 2
+HIGH_BYTES   = 1
+
+# Common message IDs
+UseCircuitCode        = LOW | 3
+RegionHandshakeReply  = LOW | 149
+UUIDNameRequest       = LOW | 235
+CompleteAgentMovement = LOW | 249
+CompletePingCheck     = HIGH | 2
+AgentUpdate           = HIGH | 4
+PacketAck             = 0xFFFFFFFB
+
 zero_rot_bytes = struct.pack('<ffff', 0.0, 0.0, 0.0, 0.0)
 zero_vec_bytes = struct.pack('<fff', 0.0, 0.0, 0.0)
 zero_f_bytes = struct.pack('<f', 0.0)
 zero_4_bytes = struct.pack('>L', 0)
 zero_1_bytes = struct.pack('>B', 0)
 
-def check_zerocoded(input: bytes) -> bool:
+def is_zerocoded(input: bytes) -> bool:
+	"""Expects bytes from the beginning of the packet."""
 	return bool(input[0] & ZEROCODED)
 
-def check_reliable(input: bytes) -> bool:
+def is_reliable(input: bytes) -> bool:
+	"""Expects bytes from the beginning of the packet."""
 	return bool(input[0] & RELIABLE)
 
-def check_resent(input: bytes) -> bool:
+def is_resent(input: bytes) -> bool:
+	"""Expects bytes from the beginning of the packet."""
 	return bool(input[0] & RESENT)
 
-def check_acknowledge(input: bytes) -> bool:
+def is_acknowledge(input: bytes) -> bool:
+	"""Expects bytes from the beginning of the packet."""
 	return bool(input[0] & ACKNOWLEDGE)
+
+def sequence(input: bytes) -> int:
+	"""Expects bytes from the beginning of the packet."""
+	return int.from_bytes(input[1:5])
 
 # Utility functions
 def header(message: int, sequence: int, flags=0, extra_byte=0, extra_header=None):
@@ -36,7 +64,10 @@ def header(message: int, sequence: int, flags=0, extra_byte=0, extra_header=None
 		if extra_byte != len(header := bytes(extra_header)):
 			raise Exception('Extra byte does not match extra header size.')
 		out.extend(header)
-	out.extend(struct.pack('>L', message))
+	if   (message & LOW) == LOW: out.extend(struct.pack('>L', message))
+	elif (message & MEDIUM) == MEDIUM: out.extend(struct.pack('>H', message))
+	elif (message & HIGH) == HIGH: out.extend(struct.pack('>B', message))
+	else: raise Exception('Unexpected value in "message" arg.')
 	return bytes(out)
 
 def human_header(input: bytes) -> str:
@@ -46,13 +77,13 @@ def human_header(input: bytes) -> str:
 	flags = input[0]
 	sequence = int.from_bytes(input[1:5])
 	extra = input[5]
-	(mID, mHZ) = message_id_from_bytes(input[6:12])
+	(mID, mHZ) = message_id_from_bytes(input[MESSAGE_BODY_BYTE:], is_zerocoded(input))
 
 	out = ''.join(f'[{sequence}] ({mHZ} {mID}) +{extra}')
-	if check_resent(flags):      out += ' Resent'
-	if check_reliable(flags):    out += ' Reliable'
-	if check_zerocoded(flags):   out += ' Encoded'
-	if check_acknowledge(flags): out += ' Acknowledge'
+	if flags & RESENT:      out += ' Resent'
+	if flags & RELIABLE:    out += ' Reliable'
+	if flags & ZEROCODED:   out += ' Encoded'
+	if flags & ACKNOWLEDGE: out += ' Acknowledge'
 	return out
 
 def message_id_from_bytes(input: bytes, encoded: bool=False) -> tuple[int, str]:
@@ -90,6 +121,7 @@ class client:
 		Sends UDP data to connected socket.
 		**Requires `login()` to be called first.**
 		"""
+		self.sequence += 1
 		return self.udp.send(b''.join(args))
 
 	def recv(self):
@@ -97,7 +129,7 @@ class client:
 		Receives UDP data to connected socket.
 		**Requires `login()` to be called first.**
 		"""
-		return self.udp.recv(1024)
+		return self.udp.recv(1024*64)
 
 	def login(self, first: str, last: str, password: str):
 		"""
@@ -124,6 +156,7 @@ class client:
 		self.udp_port = self.login_response['sim_port']
 		self.udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 		self.udp.connect((self.udp_host, self.udp_port))
+		self.sequence = 1
 
 		# Store/cache some persistent values.
 		self.circuit_code       = self.login_response['circuit_code']
