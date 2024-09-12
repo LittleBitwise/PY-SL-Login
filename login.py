@@ -29,9 +29,12 @@ client.send(
 # Main connection loop.
 
 while data := client.recv():
-	log.debug(f'{packet.human_header(data)}\n\tUDP: {zerocode.byte2hex(data)}')
-
 	(mID, mHZ) = packet.message_id_from_bytes(data[packet.MESSAGE_BODY_BYTE:], packet.is_zerocoded(data))
+
+	if (mID, mHZ) == (13, 'Medium'):
+		continue
+
+	log.debug(f'{packet.human_header(data)}\n\tUDP: {zerocode.byte2hex(data)}')
 
 	if (mID, mHZ) == (148, 'Low'):
 		log.debug('RegionHandshakeReply')
@@ -39,7 +42,6 @@ while data := client.recv():
 			packet.header(packet.RegionHandshakeReply, client.sequence),
 			zerocode.encode_all(client.agent_id_bytes, client.session_id_bytes),
 		)
-
 		log.debug('AgentUpdate')
 		client.send(
 			packet.header(packet.AgentUpdate, client.sequence, packet.ZEROCODED),
