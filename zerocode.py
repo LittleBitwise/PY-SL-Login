@@ -76,7 +76,7 @@ def debug_bytes():
 			rel := bool(flags & (reliable := 0x40)),
 			res := bool(flags & (resended := 0x20)),
 			ack := bool(flags & (acknowle := 0x10)),
-			packet.message_id_from_bytes(data[6:12], zer)
+			packet.message_from_body(data[6:12], zer)
 		])
 	#  Extra header byte ↓  ↓ Packet body (might be zero-encoded)
 	#     0  1           5  6
