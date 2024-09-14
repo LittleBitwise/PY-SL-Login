@@ -13,7 +13,7 @@ LOW    = 0xffff0000
 MEDIUM = 0xff000000
 HIGH   = 0x00000000
 
-MESSAGE_BODY_BYTE = 6
+BODY_BYTE = 6
 FIXED_BYTES  = 4
 LOW_BYTES    = 4
 MEDIUM_BYTES = 2
@@ -77,7 +77,7 @@ def human_header(input: bytes) -> str:
 	flags = input[0]
 	sequence = int.from_bytes(input[1:5])
 	extra = input[5]
-	(mID, mHZ) = message_id_from_bytes(input[MESSAGE_BODY_BYTE:], is_zerocoded(input))
+	(mID, mHZ) = message_from_body(input[BODY_BYTE:], is_zerocoded(input))
 
 	out = ''.join(f'[{sequence}] ({mHZ} {mID}) +{extra}')
 	if flags & RESENT:      out += ' Resent'
@@ -86,7 +86,7 @@ def human_header(input: bytes) -> str:
 	if flags & ACKNOWLEDGE: out += ' Acknowledge'
 	return out
 
-def message_id_from_bytes(input: bytes, encoded: bool=False) -> tuple[int, str]:
+def message_from_body(input: bytes, encoded: bool=False) -> tuple[int, str]:
 	"""
 	Converts message body into message ID and message frequency.
 	**Be sure to pass enough bytes to decode message ID.**
@@ -104,6 +104,41 @@ def message_id_from_bytes(input: bytes, encoded: bool=False) -> tuple[int, str]:
 	elif 0x0000FF01 <= id <= 0x0000FFFE: return (id & 0x00FF, 'Medium')
 	elif 0x00000001 <= id <= 0x000000FE: return (id & 0x00FF, 'High')
 	raise Exception(f'{input} contained invalid message {id} ({hex(id)})')
+
+def unpack_sequence(buffer, *args) -> list:
+	"""
+	Calls `struct.unpack()` sequentially based on format string arguments.
+	A previously unpacked value can be inserted into the next format string replacing `*`.
+	Format strings resulting in multiple values are grouped as `tuple`.
+	"""
+	out = []
+	offset = 0
+	last_val = None
+	for format in args:
+		if '*' in format and last_val is not None:
+			format = format.replace('*', str(last_val))
+		values = struct.unpack_from(format, buffer, offset)
+		offset += struct.calcsize(format)
+		single = len(values) == 1
+		out.append(values[0] if single else values)
+		last_val = values[0] if single else None
+	return out
+
+def pack_sequence(*args) -> bytes:
+	"""
+	Calls `struct.pack()` sequentially based on alternating format string and value.
+	A previously packed value can be inserted into the next format string replacing `*`.
+	"""
+	out = bytearray()
+	last_val = None
+	i = 0
+	while i < len(args):
+		format, value, i = args[i], args[i+1], i + 2
+		if '*' in format and last_val is not None:
+			format = format.replace('*', str(last_val))
+		out.extend(struct.pack(format, value))
+		last_val = value
+	return bytes(out)
 
 # UDP client and connection/circuit manager
 class client:
