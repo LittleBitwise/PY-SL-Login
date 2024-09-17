@@ -1,5 +1,3 @@
-import packet
-
 def parse():
 	"""
 	Parses `message_template.msg` and returns a bidirectional dictionary for message names and their encoded number and frequency.
@@ -7,8 +5,8 @@ def parse():
 	out = {}
 
 	conversion = {
-        'Low':    lambda x: packet.low    | x,
-        'Medium': lambda x: packet.medium | (x << 16),
+        'Low':    lambda x: 0xffff0000 | x,
+        'Medium': lambda x: (0xff00 | x) << 16,
         'High':   lambda x: x,
         'Fixed':  lambda x: x,
     }
