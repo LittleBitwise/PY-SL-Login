@@ -11,15 +11,43 @@ RELIABLE    = 0x40
 RESENT      = 0x20
 ACKNOWLEDGE = 0x10
 
-FIXED  = 0xffffff00
-LOW    = 0xffff0000
-MEDIUM = 0xff000000
-HIGH   = 0x00000000
+BODY_BYTE = 6
 
-class Uuid:
+class Frequency:
+	size = 0;
+	base = 0;
+	def __and__(self, other: int) -> int: return self.base & other
+	def __or__(self, other: int) -> int: return self.base | other
+	def __add__(self, other: int) -> int: return self.base + other
+
+class Fixed(Frequency):
+	size = 4
+	base = 0xffffff00
+class Low(Frequency):
+	size = 4
+	base = 0xffff0000
+class Medium(Frequency):
+	size = 2
+	base = 0xff000000
+class High(Frequency):
+	size = 1
+	base = 0x00000000
+
+fixed = Fixed()
+low = Low()
+medium = Medium()
+high = High()
+
+class Format:
+	size = 0
+	format = ''
+	zero = b''
+	def __str__(self) -> str: return f'{self.format}'
+
+class Uuid(Format):
 	size = 16
 	format = '16s'
-
+	zero = UUID(int=0)
 	@staticmethod
 	def from_bytes(data: bytes) -> str:
 		"""Returns a 36 character hex-string representation of the given bytes."""
@@ -29,49 +57,31 @@ class Uuid:
 	def from_string(data: str) -> bytes:
 		"""Returns a bytes representation of the given hex-string. (Hyphens optional.)"""
 		return UUID(hex=data).bytes
-
-class String:
-	size = -1
+class String(Format):
 	format = '*s'
-
 	@staticmethod
 	def from_bytes(data: bytes) -> str:
 		return str(data, encoding='utf-8')
-
-class U32:
+class U32(Format):
 	size = 4
 	format = 'i'
-
-	def __str__(self) -> str:
-		return f'{self.format}'
-
-class U16:
+	zero = b'\x00' * size
+class U16(Format):
 	size = 2
 	format = 'h'
-
-	def __str__(self) -> str:
-		return f'{self.format}'
-
-class U8:
+	zero = b'\x00' * size
+class U8(Format):
 	size = 1
 	format = 'b'
-
-	def __str__(self) -> str:
-		return f'{self.format}'
-
-class Variable1:
+	zero = b'\x00' * size
+class Variable1(Format):
 	size = 1
 	format = 'b'
-
-	def __str__(self) -> str:
-		return f'{self.format}'
-
-class Variable2:
+	zero = b'\x00' * size
+class Variable2(Format):
 	size = 2
 	format = '>h'
-
-	def __str__(self) -> str:
-		return f'{self.format}'
+	zero = b'\x00' * size
 
 string = String()
 uuid = Uuid()
@@ -81,24 +91,19 @@ u08 = U8()
 variable1 = Variable1()
 variable2 = Variable2()
 
-BODY_BYTE = 6
-FIXED_BYTES  = 4
-LOW_BYTES    = 4
-MEDIUM_BYTES = 2
-HIGH_BYTES   = 1
-
 # Common message IDs
-UseCircuitCode        = LOW | 3
-RegionHandshakeReply  = LOW | 149
-UUIDNameRequest       = LOW | 235
-CompleteAgentMovement = LOW | 249
-CompletePingCheck     = HIGH | 2
-AgentUpdate           = HIGH | 4
+UseCircuitCode        = low | 3
+RegionHandshakeReply  = low | 149
+UUIDNameRequest       = low | 235
+CompleteAgentMovement = low | 249
+CompletePingCheck     = high | 2
+AgentUpdate           = high | 4
 PacketAck             = 0xFFFFFFFB
 
-zero_rot_bytes = struct.pack('<ffff', 0.0, 0.0, 0.0, 0.0)
-zero_vec_bytes = struct.pack('<fff', 0.0, 0.0, 0.0)
-zero_f_bytes = struct.pack('<f', 0.0)
+# Common data patterns
+zero_rot_bytes = struct.pack('ffff', 0.0, 0.0, 0.0, 0.0)
+zero_vec_bytes = struct.pack('fff', 0.0, 0.0, 0.0)
+zero_f_bytes = struct.pack('f', 0.0)
 zero_4_bytes = struct.pack('i', 0)
 zero_1_bytes = struct.pack('b', 0)
 
@@ -120,18 +125,16 @@ def is_acknowledge(input: bytes) -> bool:
 
 # Utility functions
 def header(message: int, sequence: int, flags=0, extra_byte=0, extra_header=None):
-	"""
-	Create a byte sequence for a packet header.
-	"""
-	out = bytearray(struct.pack('>BLB', flags, sequence, extra_byte))
+	"""Create a byte sequence for a packet header."""
+	out = bytearray(struct.pack('>bib', flags, sequence, extra_byte))
 	if extra_header is not None:
 		if extra_byte != len(header := bytes(extra_header)):
 			raise Exception('Extra byte does not match extra header size.')
 		out.extend(header)
-	if   (message & LOW) == LOW: out.extend(struct.pack('>L', message))
-	elif (message & MEDIUM) == MEDIUM: out.extend(struct.pack('>H', message))
-	elif (message & HIGH) == HIGH: out.extend(struct.pack('>B', message))
-	else: raise Exception('Unexpected value in "message" arg.')
+	if   (message & low) == low:       out.extend(struct.pack('>i', message))
+	elif (message & medium) == medium: out.extend(struct.pack('>h', message))
+	elif (message & high) == high:     out.extend(struct.pack('>b', message))
+	else: raise Exception(f'Unexpected value in "message" arg. ({message})')
 	return bytes(out)
 
 def human_header(input: bytes) -> str:
@@ -204,7 +207,7 @@ def pack_sequence(*args) -> bytes:
 		format, value, i = str(args[i]), args[i+1], i + 2
 		if '*' in format and last_val is not None:
 			format = format.replace('*', str(last_val))
-		out.extend(struct.pack(format, value)) # todo: convert strings to bytes
+		out.extend(struct.pack(format, value)) # todo: string values to bytes
 		last_val = value
 	return bytes(out)
 
@@ -216,9 +219,6 @@ class client:
 	_login_uri = 'https://login.agni.lindenlab.com/cgi-bin/login.cgi'
 	_login_proxy = ServerProxy(_login_uri)
 
-	def __init__(self):
-		pass
-
 	def send(self, *args):
 		"""
 		Sends UDP data to connected socket.
@@ -227,7 +227,7 @@ class client:
 		self.sequence += 1
 		return self.udp.send(b''.join(args))
 
-	def recv(self):
+	def receive(self):
 		"""
 		Receives UDP data to connected socket.
 		**Requires `login()` to be called first.**
@@ -263,7 +263,7 @@ class client:
 
 		# Store/cache some persistent values.
 		self.circuit_code       = self.login_response['circuit_code']
-		self.circuit_code_bytes = struct.pack('<L', self.circuit_code)
+		self.circuit_code_bytes = struct.pack('i', self.circuit_code)
 		self.session_id         = self.login_response['session_id']
 		self.session_id_bytes   = UUID(self.session_id).bytes
 		self.agent_id           = self.login_response['agent_id']
