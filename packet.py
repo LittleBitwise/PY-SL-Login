@@ -1,5 +1,8 @@
-import xmlrpc.client, socket, struct, hashlib
+import struct
 import zerocode # local
+from xmlrpc.client import ServerProxy
+from socket import socket, AF_INET, SOCK_DGRAM
+from hashlib import md5
 from uuid import UUID
 
 # Common constants
@@ -12,6 +15,71 @@ FIXED  = 0xffffff00
 LOW    = 0xffff0000
 MEDIUM = 0xff000000
 HIGH   = 0x00000000
+
+class Uuid:
+	size = 16
+	format = '16s'
+
+	@staticmethod
+	def from_bytes(data: bytes) -> str:
+		"""Returns a 36 character hex-string representation of the given bytes."""
+		return str(UUID(bytes=data))
+
+	@staticmethod
+	def from_string(data: str) -> bytes:
+		"""Returns a bytes representation of the given hex-string. (Hyphens optional.)"""
+		return UUID(hex=data).bytes
+
+class String:
+	size = -1
+	format = '*s'
+
+	@staticmethod
+	def from_bytes(data: bytes) -> str:
+		return str(data, encoding='utf-8')
+
+class U32:
+	size = 4
+	format = 'i'
+
+	def __str__(self) -> str:
+		return f'{self.format}'
+
+class U16:
+	size = 2
+	format = 'h'
+
+	def __str__(self) -> str:
+		return f'{self.format}'
+
+class U8:
+	size = 1
+	format = 'b'
+
+	def __str__(self) -> str:
+		return f'{self.format}'
+
+class Variable1:
+	size = 1
+	format = 'b'
+
+	def __str__(self) -> str:
+		return f'{self.format}'
+
+class Variable2:
+	size = 2
+	format = '>h'
+
+	def __str__(self) -> str:
+		return f'{self.format}'
+
+string = String()
+uuid = Uuid()
+u32 = U32()
+u16 = U16()
+u08 = U8()
+variable1 = Variable1()
+variable2 = Variable2()
 
 BODY_BYTE = 6
 FIXED_BYTES  = 4
@@ -31,8 +99,8 @@ PacketAck             = 0xFFFFFFFB
 zero_rot_bytes = struct.pack('<ffff', 0.0, 0.0, 0.0, 0.0)
 zero_vec_bytes = struct.pack('<fff', 0.0, 0.0, 0.0)
 zero_f_bytes = struct.pack('<f', 0.0)
-zero_4_bytes = struct.pack('>L', 0)
-zero_1_bytes = struct.pack('>B', 0)
+zero_4_bytes = struct.pack('i', 0)
+zero_1_bytes = struct.pack('b', 0)
 
 def is_zerocoded(input: bytes) -> bool:
 	"""Expects bytes from the beginning of the packet."""
@@ -49,10 +117,6 @@ def is_resent(input: bytes) -> bool:
 def is_acknowledge(input: bytes) -> bool:
 	"""Expects bytes from the beginning of the packet."""
 	return bool(input[0] & ACKNOWLEDGE)
-
-def sequence(input: bytes) -> int:
-	"""Expects bytes from the beginning of the packet."""
-	return int.from_bytes(input[1:5])
 
 # Utility functions
 def header(message: int, sequence: int, flags=0, extra_byte=0, extra_header=None):
@@ -85,6 +149,10 @@ def human_header(input: bytes) -> str:
 	if flags & ZEROCODED:   out += ' Encoded'
 	if flags & ACKNOWLEDGE: out += ' Acknowledge'
 	return out
+
+def sequence_from_header(input: bytes) -> int:
+	"""Expects bytes from the beginning of the packet."""
+	return int.from_bytes(input[1:5])
 
 def message_from_body(input: bytes, encoded: bool=False) -> tuple[int, str]:
 	"""
@@ -133,10 +201,10 @@ def pack_sequence(*args) -> bytes:
 	last_val = None
 	i = 0
 	while i < len(args):
-		format, value, i = args[i], args[i+1], i + 2
+		format, value, i = str(args[i]), args[i+1], i + 2
 		if '*' in format and last_val is not None:
 			format = format.replace('*', str(last_val))
-		out.extend(struct.pack(format, value))
+		out.extend(struct.pack(format, value)) # todo: convert strings to bytes
 		last_val = value
 	return bytes(out)
 
@@ -146,7 +214,7 @@ class client:
 	Interface for communicating with a region in Second Life.
 	"""
 	_login_uri = 'https://login.agni.lindenlab.com/cgi-bin/login.cgi'
-	_login_proxy = xmlrpc.client.ServerProxy(_login_uri)
+	_login_proxy = ServerProxy(_login_uri)
 
 	def __init__(self):
 		pass
@@ -173,7 +241,7 @@ class client:
 		params = {
 			'first': first,
 			'last': last,
-			'passwd': '$1$' + hashlib.md5(password.encode()).hexdigest(),
+			'passwd': '$1$' + md5(password.encode()).hexdigest(),
 			'start': 'last',
 			# client identification
 			'channel': 'login.py',
@@ -189,7 +257,7 @@ class client:
 		self.login_response = self._login_proxy.login_to_simulator(params)
 		self.udp_host = self.login_response['sim_ip']
 		self.udp_port = self.login_response['sim_port']
-		self.udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+		self.udp = socket(AF_INET, SOCK_DGRAM)
 		self.udp.connect((self.udp_host, self.udp_port))
 		self.sequence = 1
 
