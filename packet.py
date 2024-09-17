@@ -65,7 +65,7 @@ class String(Format):
 	format = '*s'
 	@staticmethod
 	def from_bytes(data: bytes) -> str:
-		return str(data, encoding='utf-8')
+		return str(data, encoding='utf-8').rstrip('\x00')
 class F32(Format):
 	size = 4
 	format = 'f'
@@ -111,13 +111,6 @@ CompletePingCheck     = high | 2
 AgentUpdate           = high | 4
 PacketAck             = 0xFFFFFFFB
 
-# Common data patterns
-zero_rot_bytes = struct.pack('ffff', 0.0, 0.0, 0.0, 0.0)
-zero_vec_bytes = struct.pack('fff', 0.0, 0.0, 0.0)
-zero_f_bytes = struct.pack('f', 0.0)
-zero_4_bytes = struct.pack('i', 0)
-zero_1_bytes = struct.pack('b', 0)
-
 def is_zerocoded(input: bytes) -> bool:
 	"""Expects bytes from the beginning of the packet."""
 	return bool(input[0] & ZEROCODED)
@@ -155,7 +148,7 @@ def human_header(input: bytes) -> str:
 	flags = input[0]
 	sequence = int.from_bytes(input[1:5])
 	extra = input[5]
-	(mID, mHZ) = message_from_body(input[BODY_BYTE:], is_zerocoded(input))
+	(mID, mHZ) = human_message(input)
 
 	out = ''.join(f'[{sequence}] ({mHZ} {mID}) +{extra}')
 	if flags & RESENT:      out += ' Resent'
@@ -164,16 +157,32 @@ def human_header(input: bytes) -> str:
 	if flags & ACKNOWLEDGE: out += ' Acknowledge'
 	return out
 
-def sequence_from_header(input: bytes) -> int:
+def sequence(input: bytes) -> int:
 	"""Expects bytes from the beginning of the packet."""
 	return int.from_bytes(input[1:5])
 
-def message_from_body(input: bytes, encoded: bool=False) -> tuple[int, str]:
+def message(input: bytes) -> int:
 	"""
+	Expects bytes from the beginning of the packet.
+	Returns encoded message number and frequency.
+	**Be sure to pass enough bytes to decode message ID.**
+	"""
+	encoded = is_zerocoded(input)
+	input = input[BODY_BYTE:] if not encoded else zerocode.decode(input[BODY_BYTE:])
+	if    input.startswith(b'\xff\xff\xff'): return int.from_bytes(input[:4])
+	elif  input.startswith(b'\xff\xff'):     return int.from_bytes(input[:4])
+	elif  input.startswith(b'\xff'):         return int.from_bytes(input[:2]) << 16
+	else:                                    return int.from_bytes(input[:1])
+
+
+def human_message(input: bytes) -> tuple[int, str]:
+	"""
+	Expects bytes from the beginning of the packet.
 	Converts message body into message ID and message frequency.
 	**Be sure to pass enough bytes to decode message ID.**
 	"""
-	if encoded: input = zerocode.decode(input)
+	encoded = is_zerocoded(input)
+	input = input[BODY_BYTE:] if not encoded else zerocode.decode(input[BODY_BYTE:])
 	if    input.startswith(b'\xff\xff\xff'): input = input[:4]
 	elif  input.startswith(b'\xff\xff'):     input = input[:4]
 	elif  input.startswith(b'\xff'):         input = input[:2]
