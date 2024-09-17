@@ -38,7 +38,10 @@ while data := client.recv():
 		log.debug('RegionHandshakeReply')
 		client.send(
 			packet.header(packet.RegionHandshakeReply, client.sequence),
-			zerocode.encode_all(client.agent_id_bytes, client.session_id_bytes),
+			zerocode.encode_all(
+				client.agent_id_bytes,
+				client.session_id_bytes
+			),
 		)
 		log.debug('AgentUpdate')
 		client.send(
@@ -56,7 +59,7 @@ while data := client.recv():
 			packet.zero_4_bytes, # ControlFlags
 			packet.zero_1_bytes, # Flags
 		)
-		continue
+		pass
 
 	if (mID, mHZ) == (1, 'High'):
 		pingID, _ = packet.unpack_sequence(data[7:12], 'b', '<i')
@@ -67,11 +70,13 @@ while data := client.recv():
 		continue
 
 	if packet.is_reliable(data):
-		message_number = packet.sequence(data)
+		message_number = packet.sequence_from_header(data)
 		client.send(
 			packet.header(packet.PacketAck, client.sequence),
-			struct.pack('>B', 1),
-			struct.pack('<L', message_number),
+			packet.pack_sequence(
+				packet.u08, 1,
+				packet.u32, message_number,
+			)
 		)
 		continue
 
