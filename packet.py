@@ -19,6 +19,10 @@ class Frequency:
 	def __and__(self, other: int) -> int: return self.base & other
 	def __or__(self, other: int) -> int: return self.base | other
 	def __add__(self, other: int) -> int: return self.base + other
+	def __eq__(self, other: int) -> int: return self.base == other
+	def __rand__(self, other: int) -> int: return other & self.base
+	def __ror__(self, other: int) -> int: return other | self.base
+	def __radd__(self, other: int) -> int: return other + self.base
 
 class Fixed(Frequency):
 	size = 4
@@ -62,32 +66,39 @@ class String(Format):
 	@staticmethod
 	def from_bytes(data: bytes) -> str:
 		return str(data, encoding='utf-8')
+class F32(Format):
+	size = 4
+	format = 'f'
+	zero = b'\x00' * size
+	zero_vector = zero * 3
+	zero_rotation = zero * 4
 class U32(Format):
 	size = 4
-	format = 'i'
+	format = 'L'
 	zero = b'\x00' * size
 class U16(Format):
 	size = 2
-	format = 'h'
+	format = 'H'
 	zero = b'\x00' * size
 class U8(Format):
 	size = 1
-	format = 'b'
+	format = 'B'
 	zero = b'\x00' * size
 class Variable1(Format):
 	size = 1
-	format = 'b'
+	format = 'B'
 	zero = b'\x00' * size
 class Variable2(Format):
 	size = 2
-	format = '>h'
+	format = '>H'
 	zero = b'\x00' * size
 
 string = String()
 uuid = Uuid()
+f32 = F32()
 u32 = U32()
 u16 = U16()
-u08 = U8()
+u8 = U8()
 variable1 = Variable1()
 variable2 = Variable2()
 
@@ -126,14 +137,14 @@ def is_acknowledge(input: bytes) -> bool:
 # Utility functions
 def header(message: int, sequence: int, flags=0, extra_byte=0, extra_header=None):
 	"""Create a byte sequence for a packet header."""
-	out = bytearray(struct.pack('>bib', flags, sequence, extra_byte))
+	out = bytearray(struct.pack('>BLB', flags, sequence, extra_byte))
 	if extra_header is not None:
 		if extra_byte != len(header := bytes(extra_header)):
 			raise Exception('Extra byte does not match extra header size.')
 		out.extend(header)
-	if   (message & low) == low:       out.extend(struct.pack('>i', message))
-	elif (message & medium) == medium: out.extend(struct.pack('>h', message))
-	elif (message & high) == high:     out.extend(struct.pack('>b', message))
+	if   (message & low) == low:       out.extend(struct.pack('>L', message))
+	elif (message & medium) == medium: out.extend(struct.pack('>H', message))
+	elif (message & high) == high:     out.extend(struct.pack('>B', message))
 	else: raise Exception(f'Unexpected value in "message" arg. ({message})')
 	return bytes(out)
 
