@@ -7,7 +7,7 @@ def parse():
 	conversion = {
         'Low':    lambda x: 0xffff0000 | x,
         'Medium': lambda x: (0xff00 | x) << 16,
-        'High':   lambda x: x,
+        'High':   lambda x: x << 24,
         'Fixed':  lambda x: x,
     }
 
@@ -33,3 +33,17 @@ def parse():
 	return out
 
 message = parse()
+
+if __name__ == '__main__':
+	to_hex = lambda x: hex(x)[2:]
+	print('Fixed',  k := 'PacketAck', to_hex(message[k]))
+	print('High',   k := 'AgentUpdate', to_hex(message[k]))
+	print('High',   k := 'StartPingCheck', to_hex(message[k]))
+	print('High',   k := 'CompletePingCheck', to_hex(message[k]))
+	print('High',   k := 'LayerData', to_hex(message[k]))
+	print('Medium', k := 'CoarseLocationUpdate', to_hex(message[k]))
+	print('Low',    k := 'UseCircuitCode', to_hex(message[k]))
+	print('Low',    k := 'CompleteAgentMovement', to_hex(message[k]))
+	print('Low',    k := 'RegionHandshake', to_hex(message[k]))
+	print('Low',    k := 'RegionHandshakeReply', to_hex(message[k]))
+	print('Low',    k := 'KickUser', to_hex(message[k]))
