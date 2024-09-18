@@ -136,8 +136,8 @@ def header(message: int, sequence: int, flags=0, extra_byte=0, extra_header=None
 			raise Exception('Extra byte does not match extra header size.')
 		out.extend(header)
 	if   (message & low) == low:       out.extend(struct.pack('>L', message))
-	elif (message & medium) == medium: out.extend(struct.pack('>H', message))
-	elif (message & high) == high:     out.extend(struct.pack('>B', message))
+	elif (message & medium) == medium: out.extend(struct.pack('>H', message >> 16))
+	elif (message & high) == high:     out.extend(struct.pack('>B', message >> 24))
 	else: raise Exception(f'Unexpected value in "message" arg. ({message})')
 	return bytes(out)
 
@@ -172,7 +172,7 @@ def message(input: bytes) -> int:
 	if    input.startswith(b'\xff\xff\xff'): return int.from_bytes(input[:4])
 	elif  input.startswith(b'\xff\xff'):     return int.from_bytes(input[:4])
 	elif  input.startswith(b'\xff'):         return int.from_bytes(input[:2]) << 16
-	else:                                    return int.from_bytes(input[:1])
+	else:                                    return int.from_bytes(input[:1]) << 24
 
 
 def human_message(input: bytes) -> tuple[int, str]:
