@@ -88,23 +88,23 @@ SendCompleteAgentMovement()
 # Main connection loop.
 
 while data := client.receive():
-	number = packet.message(data)
+	number = packet.message_number(data)
 	message = template.message[number]
 
 	if message not in ignored_logging:
 		log.debug('%s\t%s\n\tUDP: %s', packet.human_header(data), message, zerocode.byte2hex(data))
 
+	if packet.is_reliable(data):
+		sequence_number = packet.sequence_number(data)
+		SendPacketAck(sequence_number)
+
+	if message == 'StartPingCheck':
+		pingID = packet.unpack_sequence(data[7:8], packet.u8)
+		SendCompletePingCheck(pingID)
+
 	if message == 'RegionHandshake':
 		SendRegionHandshakeReply()
 		SendAgentUpdate()
-
-	if message == 'StartPingCheck':
-		pingID, _ = packet.unpack_sequence(data[7:12], 'b', '<i')
-		SendCompletePingCheck(pingID)
-
-	if packet.is_reliable(data):
-		message_number = packet.sequence(data)
-		SendPacketAck(message_number)
 
 	if message == 'KickUser':
 		HandleKickUser(data)
