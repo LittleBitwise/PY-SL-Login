@@ -157,11 +157,11 @@ def human_header(input: bytes) -> str:
 	if flags & ACKNOWLEDGE: out += ' Acknowledge'
 	return out
 
-def sequence(input: bytes) -> int:
+def sequence_number(input: bytes) -> int:
 	"""Expects bytes from the beginning of the packet."""
 	return int.from_bytes(input[1:5])
 
-def message(input: bytes) -> int:
+def message_number(input: bytes) -> int:
 	"""
 	Expects bytes from the beginning of the packet.
 	Returns encoded message number and frequency.
@@ -205,7 +205,7 @@ def unpack_sequence(buffer, *args) -> list:
 	out = []
 	offset = 0
 	last_val = None
-	for format in args:
+	for format in map(str, args):
 		if '*' in format and last_val is not None:
 			format = format.replace('*', str(last_val))
 		values = struct.unpack_from(format, buffer, offset)
