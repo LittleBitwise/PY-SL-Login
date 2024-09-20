@@ -1,4 +1,5 @@
 import logging
+import threading # for user input
 import zerocode, packet, template # local
 
 logging.basicConfig(level=logging.DEBUG, format='\t%(levelname)s\t%(message)s\n', filename='dump.log')
@@ -6,6 +7,7 @@ log = logging.getLogger()
 
 ignored_logging = [
 	'LayerData',
+	'SimulatorViewerTimeMessage',
 	'ObjectUpdate',
 	'ObjectUpdateCompressed',
 	'ObjectUpdateCached'
@@ -22,7 +24,30 @@ log.info(client.login('firstname', 'lastname', 'password'))
 
 log.info('LOGGED IN')
 
-# UDP messages
+# User input handler.
+
+user_input = None
+
+def UserInputThread():
+	global user_input
+	while True:
+		user_input = input()
+def HandleUserInput():
+	global user_input
+	if user_input.lower() == 'q':
+		exit()
+	SendChatFromViewer(user_input)
+	user_input = None
+	pass
+
+user_input_thread = threading.Thread(
+	name='user_input_thread',
+	target=UserInputThread,
+	daemon=True
+)
+user_input_thread.start()
+
+# UDP messages.
 
 def SendUseCircuitCode():
 	client.send(
@@ -71,6 +96,22 @@ def SendPacketAck(message_number: int):
 			packet.u32, message_number,
 		)
 	)
+def SendChatFromViewer(text: str):
+	log.info(f'Sending chat: {text}')
+	text_bytes = text.encode('utf-8')
+	client.send(
+		packet.header(template.message['ChatFromViewer'], client.sequence, packet.ZEROCODED),
+		zerocode.encode(
+			packet.pack_sequence(
+				packet.uuid, client.agent_id_bytes,
+				packet.uuid, client.session_id_bytes,
+				packet.variable2, len(text_bytes),
+				packet.string, text_bytes,
+				packet.u8, 1,
+				packet.u32, 0
+			)
+		)
+	)
 def HandleKickUser(data: bytes):
 	data = packet.unpack_sequence(
 		data[48:],
@@ -99,7 +140,7 @@ while data := client.receive():
 		SendPacketAck(sequence_number)
 
 	if message == 'StartPingCheck':
-		pingID = packet.unpack_sequence(data[7:8], packet.u8)
+		[pingID] = packet.unpack_sequence(data[7:8], packet.u8)
 		SendCompletePingCheck(pingID)
 
 	if message == 'RegionHandshake':
@@ -109,3 +150,6 @@ while data := client.receive():
 	if message == 'KickUser':
 		HandleKickUser(data)
 		break
+
+	if user_input:
+		HandleUserInput()
