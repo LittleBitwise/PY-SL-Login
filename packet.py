@@ -45,7 +45,7 @@ high = High()
 class Format:
 	size = 0
 	format = ''
-	zero = b''
+	zero = b'\x00' * size
 	def __str__(self) -> str: return f'{self.format}'
 
 class Uuid(Format):
@@ -56,7 +56,6 @@ class Uuid(Format):
 	def from_bytes(data: bytes) -> str:
 		"""Returns a 36 character hex-string representation of the given bytes."""
 		return str(UUID(bytes=data))
-
 	@staticmethod
 	def from_string(data: str) -> bytes:
 		"""Returns a bytes representation of the given hex-string. (Hyphens optional.)"""
@@ -90,7 +89,15 @@ class Variable1(Format):
 	zero = b'\x00' * size
 class Variable2(Format):
 	size = 2
-	format = '>H'
+	format = '<H'
+	zero = b'\x00' * size
+class Vector(Format):
+	size = 4 * 3
+	format = '<fff'
+	zero = b'\x00' * size
+class Rotation(Format):
+	size = 4 * 4
+	format = '<ffff'
 	zero = b'\x00' * size
 
 string = String()
@@ -101,6 +108,8 @@ u16 = U16()
 u8 = U8()
 variable1 = Variable1()
 variable2 = Variable2()
+vector = Vector()
+rotation = Rotation()
 
 # Common message IDs
 UseCircuitCode        = low | 3
@@ -281,12 +290,12 @@ class client:
 		self.udp.connect((self.udp_host, self.udp_port))
 		self.sequence = 1
 
-		# Store/cache some persistent values.
-		self.circuit_code       = self.login_response['circuit_code']
-		self.circuit_code_bytes = struct.pack('i', self.circuit_code)
-		self.session_id         = self.login_response['session_id']
-		self.session_id_bytes   = UUID(self.session_id).bytes
-		self.agent_id           = self.login_response['agent_id']
-		self.agent_id_bytes     = UUID(self.agent_id).bytes
+		# Pre-hash some persistent values.
+		circuit_code = self.login_response['circuit_code']
+		session_id   = self.login_response['session_id']
+		agent_id     = self.login_response['agent_id']
+		self.circuit_code_bytes = struct.pack('i', circuit_code)
+		self.session_id_bytes   = UUID(session_id).bytes
+		self.agent_id_bytes     = UUID(agent_id).bytes
 
 		return self.login_response
