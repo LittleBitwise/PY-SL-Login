@@ -18,7 +18,9 @@ def encode_all(*args: bytes) -> bytes:
 	"""
 	Calls `packet.encode()` on each argument containing `bytes`.
 	"""
-	return bytes(bytearray().join(encode(arg) for arg in args if isinstance(arg, bytes)))
+	b = bytearray()
+	b.join(arg for arg in args if isinstance(arg, bytes))
+	return encode(b)
 
 def decode(input: bytes) -> bytes:
 	"""
@@ -47,4 +49,3 @@ def byte2hex(input: bytes) -> str:
 	Converts bytes into formatted string `'AA BB CC DD'`.
 	"""
 	return ' '.join(f'{byte:02X}' for byte in input)
-
