@@ -1,3 +1,4 @@
+import builtins
 import struct
 import zerocode # local
 from xmlrpc.client import ServerProxy
@@ -6,10 +7,10 @@ from hashlib import md5
 from uuid import UUID
 
 # Common constants
-ZEROCODED   = 0x80
-RELIABLE    = 0x40
-RESENT      = 0x20
-ACKNOWLEDGE = 0x10
+ZEROCODED   = 0b1000_0000
+RELIABLE    = 0b0100_0000
+RESENT      = 0b0010_0000
+ACKNOWLEDGE = 0b0001_0000
 
 BODY_BYTE = 6
 
@@ -51,7 +52,7 @@ class Format:
 class Uuid(Format):
 	size = 16
 	format = '16s'
-	zero = UUID(int=0)
+	zero = UUID(int=0).bytes
 	@staticmethod
 	def from_bytes(data: bytes) -> str:
 		"""Returns a 36 character hex-string representation of the given bytes."""
@@ -67,25 +68,25 @@ class String(Format):
 		return str(data, encoding='utf-8').rstrip('\x00')
 class F32(Format):
 	size = 4
-	format = 'f'
+	format = '<f'
 	zero = b'\x00' * size
 	zero_vector = zero * 3
 	zero_rotation = zero * 4
 class U32(Format):
 	size = 4
-	format = 'L'
+	format = '<L'
 	zero = b'\x00' * size
 class U16(Format):
 	size = 2
-	format = 'H'
+	format = '<H'
 	zero = b'\x00' * size
 class U8(Format):
 	size = 1
-	format = 'B'
+	format = '<B'
 	zero = b'\x00' * size
 class Variable1(Format):
 	size = 1
-	format = 'B'
+	format = '<B'
 	zero = b'\x00' * size
 class Variable2(Format):
 	size = 2
@@ -94,11 +95,18 @@ class Variable2(Format):
 class Vector(Format):
 	size = 4 * 3
 	format = '<fff'
-	zero = b'\x00' * size
+	zero = (0.0, 0.0, 0.0)
 class Rotation(Format):
 	size = 4 * 4
 	format = '<ffff'
+	zero = (0.0, 0.0, 0.0, 0.0)
+class Bool(Format):
+	size = 1
+	format = '<B'
 	zero = b'\x00' * size
+	@staticmethod
+	def from_bytes(data: bytes) -> builtins.bool:
+		return builtins.bool(data)
 
 string = String()
 uuid = Uuid()
@@ -110,6 +118,7 @@ variable1 = Variable1()
 variable2 = Variable2()
 vector = Vector()
 rotation = Rotation()
+bool = Bool()
 
 # Common message IDs
 UseCircuitCode        = low | 3
@@ -120,21 +129,21 @@ CompletePingCheck     = high | 2
 AgentUpdate           = high | 4
 PacketAck             = 0xFFFFFFFB
 
-def is_zerocoded(input: bytes) -> bool:
+def is_zerocoded(input: bytes) -> builtins.bool:
 	"""Expects bytes from the beginning of the packet."""
-	return bool(input[0] & ZEROCODED)
+	return builtins.bool(input[0] & ZEROCODED)
 
-def is_reliable(input: bytes) -> bool:
+def is_reliable(input: bytes) -> builtins.bool:
 	"""Expects bytes from the beginning of the packet."""
-	return bool(input[0] & RELIABLE)
+	return builtins.bool(input[0] & RELIABLE)
 
-def is_resent(input: bytes) -> bool:
+def is_resent(input: bytes) -> builtins.bool:
 	"""Expects bytes from the beginning of the packet."""
-	return bool(input[0] & RESENT)
+	return builtins.bool(input[0] & RESENT)
 
-def is_acknowledge(input: bytes) -> bool:
+def is_acknowledge(input: bytes) -> builtins.bool:
 	"""Expects bytes from the beginning of the packet."""
-	return bool(input[0] & ACKNOWLEDGE)
+	return builtins.bool(input[0] & ACKNOWLEDGE)
 
 # Utility functions
 def header(message: int, sequence: int, flags=0, extra_byte=0, extra_header=None):
@@ -177,7 +186,7 @@ def message_number(input: bytes) -> int:
 	**Be sure to pass enough bytes to decode message ID.**
 	"""
 	encoded = is_zerocoded(input)
-	input = input[BODY_BYTE:] if not encoded else zerocode.decode(input[BODY_BYTE:])
+	input = zerocode.decode(input[BODY_BYTE:]) if encoded else input[BODY_BYTE:]
 	if    input.startswith(b'\xff\xff\xff'): return int.from_bytes(input[:4])
 	elif  input.startswith(b'\xff\xff'):     return int.from_bytes(input[:4])
 	elif  input.startswith(b'\xff'):         return int.from_bytes(input[:2]) << 16
@@ -217,11 +226,16 @@ def unpack_sequence(buffer, *args) -> list:
 	for format in map(str, args):
 		if '*' in format and last_val is not None:
 			format = format.replace('*', str(last_val))
-		values = struct.unpack_from(format, buffer, offset)
-		offset += struct.calcsize(format)
-		single = len(values) == 1
-		out.append(values[0] if single else values)
-		last_val = values[0] if single else None
+		if format == '0s':
+			out.append(b'')
+			last_val = None
+			continue
+		else:
+			values = struct.unpack_from(format, buffer, offset)
+			single = len(values) == 1
+			out.append(values[0] if single else values)
+			last_val = values[0] if single else None
+			offset += struct.calcsize(format)
 	return out
 
 def pack_sequence(*args) -> bytes:
@@ -236,7 +250,11 @@ def pack_sequence(*args) -> bytes:
 		format, value, i = str(args[i]), args[i+1], i + 2
 		if '*' in format and last_val is not None:
 			format = format.replace('*', str(last_val))
-		out.extend(struct.pack(format, value)) # todo: string values to bytes
+		if isinstance(value, tuple):
+			out.extend(struct.pack(format, *value))
+		else:
+			value = value.encode() if isinstance(value, str) else value
+			out.extend(struct.pack(format, value))
 		last_val = value
 	return bytes(out)
 
