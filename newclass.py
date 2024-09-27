@@ -9,7 +9,6 @@ class Format:
 	format = ''
 	def __init__(self, value):
 		self._data = value[0] if isinstance(value, tuple) else value
-		print(f'NEW {value} SET AS {self._data} IN {type(self)}')
 	def __str__(self): return f'{self.format}'
 	def __repr__(self): return f'{pretty(self._data)}'
 
@@ -124,27 +123,29 @@ class Message:
 	def to_bytes(self):
 		out = bytearray()
 
-		for i, (name, impl) in enumerate(self._keys.items()):
+		# for i, (name, impl) in enumerate(self._keys.items()):
+		for (name, impl) in self._keys.items():
 			value = self[name] # raw data
-			print('CONVERTING', name, impl, value, type(value))
+			# print('CONVERTING', name, impl, value, type(value))
 
 			if isinstance(value, int):
-				out.append(value)
-				continue
+				value = struct.pack(impl.format, value)
 			elif isinstance(value, float):
 				value = struct.pack(F32.format, value)
 			elif isinstance(value, tuple):
 				if 2 == (_len := len(value)): # Variable1, Variable2
-					out.append(value[0])
+					_length_format = impl.format[:2]
+					out.extend(struct.pack(_length_format, value[0]))
 					out.extend(value[1])
+					# print('BYTESTRING', zerocode.encode(out).hex(' '), '\n')
 					continue
 				elif 3 == _len: value = struct.pack(Vector.format, *value)
 				elif 4 == _len: value = struct.pack(Rotation.format, *value)
 				else: raise ValueError(f'Unexpected tuple length: {_len}')
 
-			print('\t', type(value))
+			# print('\t', type(value))
 			out.extend(value)
-			print('BYTESTRING', zerocode.encode(out).hex(' '), '\n')
+			# print('BYTESTRING', zerocode.encode(out).hex(' '), '\n')
 			pass
 
 		if self._zerocoded:
@@ -315,7 +316,10 @@ data = zerocode.hex2byte('C0 00 00 00 3C 00 FF FF 00 01 FE 77 9E 1D 56 55 00 01 
 print(ImprovedInstantMessage.from_bytes(data))
 print()
 data = zerocode.hex2byte('C0 00 00 0F BB 00 FF FF 00 01 FE 77 9E 1D 56 55 00 01 4E 22 94 0A CD 7B 5A DD DB E0 D6 D5 43 A0 A5 5E 43 6A A3 DE 58 3D 4C C5 25 25 00 01 8B 84 B5 DC B5 70 4A 77 93 05 3B A3 7A E0 C8 A9 00 20 01 00 01 FC 1A A8 8A E0 70 04 55 07 0F F6 D8 20 3D 13 49 00 04 12 57 75 6C 66 69 65 20 52 65 61 6E 69 6D 61 74 6F 72 00 01 0F 00 01 74 68 69 73 20 69 73 20 61 20 74 65 73 74 00 01 01 00 02')
-# 77 9E 1D 56 55 00 01 4E 22 94 0A CD 7B 5A DD DB E0 D6 D5 43 A0 A5 5E 43 6A A3 DE 58 3D 4C C5 25 25 00 01 8B 84 B5 DC B5 70 4A 77 93 05 3B A3 7A E0 C8 A9 00 1D 01 00 01 FC 1A A8 8A E0 70 04 55 07 0F F6 D8 20 3D 13 49 00 01 12 57 75 6C 66 69 65 20 52 65 61 6E 69 6D 61 74 6F 72 00 01 0F 74 68 69 73 20 69 73 20 61 20 74 65 73 74 00 01 01 00 01
+# 77 9E 1D 56 55 00 01 4E 22 94 0A CD 7B 5A DD DB E0 D6 D5 43 A0 A5 5E 43 6A A3 DE 58 3D 4C C5 25 25 00 01 8B 84 B5 DC B5 70 4A 77 93 05 3B A3 7A E0 C8 A9 00 20 01 00 01 FC 1A A8 8A E0 70 04 55 07 0F F6 D8 20 3D 13 49 00 04 12 57 75 6C 66 69 65 20 52 65 61 6E 69 6D 61 74 6F 72 00 01 0F 00 01 74 68 69 73 20 69 73 20 61 20 74 65 73 74 00 01 01 00 02
+print('UNENCODED', zerocode.byte2hex(zerocode.decode(data[6:])))
 print(m := ImprovedInstantMessage.from_bytes(data))
 print()
 print(zerocode.byte2hex(m.to_bytes()))
+
+# not working jasfgjfghjsg
