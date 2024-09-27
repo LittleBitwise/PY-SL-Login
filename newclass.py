@@ -120,102 +120,6 @@ class Message:
 	def __repr__(self):
 		return pretty(self._data, sort_dicts=False)
 
-	def to_bytes(self):
-		out = bytearray()
-
-		# for i, (name, impl) in enumerate(self._keys.items()):
-		for (name, impl) in self._keys.items():
-			value = self[name] # raw data
-			# print('CONVERTING', name, impl, value, type(value))
-
-			if isinstance(value, int):
-				value = struct.pack(impl.format, value)
-			elif isinstance(value, float):
-				value = struct.pack(F32.format, value)
-			elif isinstance(value, tuple):
-				if 2 == (_len := len(value)): # Variable1, Variable2
-					_length_format = impl.format[:2]
-					out.extend(struct.pack(_length_format, value[0]))
-					out.extend(value[1])
-					# print('BYTESTRING', zerocode.encode(out).hex(' '), '\n')
-					continue
-				elif 3 == _len: value = struct.pack(Vector.format, *value)
-				elif 4 == _len: value = struct.pack(Rotation.format, *value)
-				else: raise ValueError(f'Unexpected tuple length: {_len}')
-
-			# print('\t', type(value))
-			out.extend(value)
-			# print('BYTESTRING', zerocode.encode(out).hex(' '), '\n')
-			pass
-
-		if self._zerocoded:
-			print('zerocoding')
-			out = zerocode.encode(out)
-			pass
-		return bytes(out)
-
-	@classmethod
-	def from_bytes(cls, data: bytes):
-		"""Parses packet bytes according to message fields."""
-		def unpack_sequence(buffer: bytes, *args):
-			"""Unpacks bytes from buffer according to struct format strings"""
-			out = []
-			offset = 0
-			last_val = None
-			for format in map(str, args):
-				# print(f'FORMAT {format:<4}', 'AHEAD', zerocode.byte2hex(buffer[offset:offset+4]), 'OFFSET', offset)
-				if format == Variable1.format:
-					[length] = struct.unpack_from(U8.format, buffer, offset)
-					# print('VAR1 LENGTH', str(length))
-					[string] = struct.unpack_from(f'{str(length)}s', buffer, offset + 1)
-					out.append((length, string))
-					last_val = None
-					offset += 1 + length
-					continue
-				if format == Variable2.format:
-					[length] = struct.unpack_from(U16.format, buffer, offset)
-					# print('VAR2 LENGTH', str(length))
-					[string] = struct.unpack_from(f'{str(length)}s', buffer, offset + 2)
-					out.append((length, string))
-					last_val = None
-					offset += 2 + length
-					continue
-				if '*' in format and last_val is not None:
-					format = format.replace('*', str(last_val))
-				if format == '0s':
-					out.append(b'')
-					last_val = None
-					continue
-				values = struct.unpack_from(format, buffer, offset)
-				single = len(values) == 1
-				out.append(values[0] if single else values)
-				last_val = values[0] if single else None
-				offset += struct.calcsize(format)
-			return out
-		message = cls()
-		body_byte = 6
-		# print('CLASS', type(message), 'IN', __class__)
-		# print('KEYS', message._keys)
-		# print('VALUES', message._keys.values())
-		formats = [x.format for x in message._keys.values()]
-		# print('FORMATS', formats)
-		if message._zerocoded:
-			data = data[body_byte:]
-			data = zerocode.decode(data)
-			# print(zerocode.byte2hex(data))
-			data = data[message._frequency:]
-			unpacked = unpack_sequence(data, *formats)
-		else:
-			data = data[body_byte + message._frequency:]
-			# print(zerocode.byte2hex(data))
-			unpacked = unpack_sequence(data, *formats)
-
-		# print('UNPACKED', unpacked)
-		for i, (name, impl) in enumerate(message._keys.items()): # assign
-			# print('ASSIGN', name, unpacked[i], impl, '->', impl(unpacked[i]))
-			message[name] = impl(unpacked[i])
-		return message
-
 class StartPingCheck(Message):
 	_frequency = Format.alias('High').size
 	_keys = {
@@ -294,7 +198,101 @@ class RegionHandshake(Message):
 		'TerrainHeightRange11': F32,
 	}
 
+@classmethod
+def _from_bytes(cls, data: bytes):
+	"""Parses packet bytes according to message fields."""
+	def unpack_sequence(buffer: bytes, *args):
+		"""Unpacks bytes from buffer according to struct format strings"""
+		out = []
+		offset = 0
+		last_val = None
+		for format in map(str, args):
+			# print(f'FORMAT {format:<4}', 'AHEAD', zerocode.byte2hex(buffer[offset:offset+4]), 'OFFSET', offset)
+			if format == Variable1.format:
+				[length] = struct.unpack_from(U8.format, buffer, offset)
+				# print('VAR1 LENGTH', str(length))
+				[string] = struct.unpack_from(f'{str(length)}s', buffer, offset + 1)
+				out.append((length, string))
+				last_val = None
+				offset += 1 + length
+				continue
+			if format == Variable2.format:
+				[length] = struct.unpack_from(U16.format, buffer, offset)
+				# print('VAR2 LENGTH', str(length))
+				[string] = struct.unpack_from(f'{str(length)}s', buffer, offset + 2)
+				out.append((length, string))
+				last_val = None
+				offset += 2 + length
+				continue
+			if '*' in format and last_val is not None:
+				format = format.replace('*', str(last_val))
+			if format == '0s':
+				out.append(b'')
+				last_val = None
+				continue
+			values = struct.unpack_from(format, buffer, offset)
+			single = len(values) == 1
+			out.append(values[0] if single else values)
+			last_val = values[0] if single else None
+			offset += struct.calcsize(format)
+		return out
+	message = cls()
+	body_byte = 6
+	# print('CLASS', type(message), 'IN', __class__)
+	# print('KEYS', message._keys)
+	# print('VALUES', message._keys.values())
+	formats = [x.format for x in message._keys.values()]
+	# print('FORMATS', formats)
+	if message._zerocoded:
+		data = data[body_byte:]
+		data = zerocode.decode(data)
+		# print(zerocode.byte2hex(data))
+		data = data[message._frequency:]
+		unpacked = unpack_sequence(data, *formats)
+	else:
+		data = data[body_byte + message._frequency:]
+		# print(zerocode.byte2hex(data))
+		unpacked = unpack_sequence(data, *formats)
 
+	# print('UNPACKED', unpacked)
+	for i, (name, impl) in enumerate(message._keys.items()): # assign
+		# print('ASSIGN', name, unpacked[i], impl, '->', impl(unpacked[i]))
+		message[name] = impl(unpacked[i])
+	return message
+
+def _to_bytes(self):
+	out = bytearray()
+
+	# for i, (name, impl) in enumerate(self._keys.items()):
+	for (name, impl) in self._keys.items():
+		value = self[name] # raw data
+		# print('CONVERTING', name, impl, value, type(value))
+
+		if isinstance(value, int):
+			value = struct.pack(impl.format, value)
+		elif isinstance(value, float):
+			value = struct.pack(F32.format, value)
+		elif isinstance(value, tuple):
+			if 2 == (_len := len(value)): # Variable1, Variable2
+				_length_format = impl.format[:2]
+				out.extend(struct.pack(_length_format, value[0]))
+				out.extend(value[1])
+				# print('BYTESTRING', zerocode.encode(out).hex(' '), '\n')
+				continue
+			elif 3 == _len: value = struct.pack(Vector.format, *value)
+			elif 4 == _len: value = struct.pack(Rotation.format, *value)
+			else: raise ValueError(f'Unexpected tuple length: {_len}')
+
+		# print('\t', type(value))
+		out.extend(value)
+		# print('BYTESTRING', zerocode.encode(out).hex(' '), '\n')
+
+	if self._zerocoded:
+		out = zerocode.encode(out)
+	return bytes(out)
+
+Message.to_bytes = _to_bytes
+Message.from_bytes = _from_bytes
 
 # StartPingCheck
 data = zerocode.hex2byte('00 00 00 00 38 00 01 01 37 00 00 00')
@@ -321,5 +319,3 @@ print('UNENCODED', zerocode.byte2hex(zerocode.decode(data[6:])))
 print(m := ImprovedInstantMessage.from_bytes(data))
 print()
 print(zerocode.byte2hex(m.to_bytes()))
-
-# not working jasfgjfghjsg
