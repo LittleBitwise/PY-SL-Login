@@ -1,0 +1,284 @@
+import struct
+import zerocode
+from data.types import *
+
+class Message:
+	_zerocoded = False
+	_frequency = Format.alias('Low').size
+	_keys = {}
+
+	def __init__(self):
+		self._data = dict.fromkeys(self._keys)
+
+	def data(self, key: str):
+		"""Returns the underlying object being stored."""
+		return self._data[key]
+
+	def __getitem__(self, key: str):
+		"""Returns a textual representation of the stored value."""
+		if key not in self._keys:
+			raise KeyError(f"Key '{key}' not in {', '.join(self._keys)}")
+		# print(f'Get self._data["{key}"] =', self._data[key].value)
+		return self._data[key].value
+
+	def __setitem__(self, key: str, value):
+		if key not in self._keys:
+			raise KeyError(f"Key `{key}` not in {', '.join(self._keys)}")
+		expected = self._keys[key]
+		if not isinstance(value, expected):
+			raise ValueError(f"{key} value `{value}` is not {expected}")
+		self._data[key] = value
+		# print(f'Set self._data["{key}"] =', value.value)
+
+	def __str__(self):
+		out = ''
+		for k, v in self._data.items():
+			if not isinstance(v, (Variable1, Variable2)):
+				out += f"{k}: {v.value}\n"
+			else:
+				out += f"{k}: [{v.length}] {v.value}\n"
+		return out
+
+	# def __repr__(self):
+	# 	return pretty(self._data, sort_dicts=False)
+
+class StartPingCheck(Message):
+	_frequency = Format.alias('High').size
+	_keys = {
+		'PingID': U8,
+		'OldestUnacked': U32,
+	}
+
+class AgentMovementComplete(Message):
+	_keys = {
+		'AgentID': Uuid,
+		'SessionID': Uuid,
+		'Position': Vector,
+		'LookAt': Vector,
+		'RegionHandle': U64,
+		'Timestamp': U32,
+		'ChannelVersion': Variable2,
+	}
+
+class ChatFromSimulator(Message):
+	_keys = {
+		'FromName': Variable1,
+		'SourceID': Uuid,
+		'OwnerID': Uuid,
+		'SourceType': U8,
+		'ChatType': U8,
+		'Audible': U8,
+		'Position': Vector,
+		'Message': Variable2,
+	}
+
+class ImprovedInstantMessage(Message):
+	_zerocoded = True
+	_keys = {
+		'AgentID': Uuid,
+		'SessionID': Uuid,
+		'FromGroup': Bool,
+		'ToAgentID': Uuid,
+		'ParentEstateID': U32,
+		'RegionID': Uuid,
+		'Position': Vector,
+		'Offline': U8,
+		'Dialog': U8,
+		'ID': Uuid,
+		'Timestamp': U32,
+		'FromAgentName': Variable1,
+		'Message': Variable2,
+		'BinaryBucket': Variable2,
+	}
+
+class RegionHandshake(Message):
+	_zerocoded = True
+	_keys = {
+		'RegionFlags': U32,
+		'SimAccess': U8,
+		'SimName': Variable1,
+		'SimOwner': Uuid,
+		'IsEstateManager': Bool,
+		'WaterHeight': F32,
+		'BillableFactor': F32,
+		'CacheID': Uuid,
+		'TerrainBase0': Uuid,
+		'TerrainBase1': Uuid,
+		'TerrainBase2': Uuid,
+		'TerrainBase3': Uuid,
+		'TerrainDetail0': Uuid,
+		'TerrainDetail1': Uuid,
+		'TerrainDetail2': Uuid,
+		'TerrainDetail3': Uuid,
+		'TerrainStartHeight00': F32,
+		'TerrainStartHeight01': F32,
+		'TerrainStartHeight10': F32,
+		'TerrainStartHeight11': F32,
+		'TerrainHeightRange00': F32,
+		'TerrainHeightRange01': F32,
+		'TerrainHeightRange10': F32,
+		'TerrainHeightRange11': F32,
+	}
+
+class RegionHandshakeReply(Message):
+	_zerocoded = True
+	_keys = {
+		'AgentID': Uuid,
+		'SessionID': Uuid,
+		'Flags': U32,
+	}
+
+class AgentUpdate(Message):
+	_zerocoded = True
+	_keys = {
+		'AgentID': Uuid,
+		'SessionID': Uuid,
+		'BodyRotation': Rotation,
+		'HeadRotation': Rotation,
+		'State': U8,
+		'CameraCenter': Vector,
+		'CameraAtAxis': Vector,
+		'CameraLeftAxis': Vector,
+		'CameraUpAxis': Vector,
+		'Far': F32,
+		'ControlFlags': U32,
+		'Flags': U8,
+	}
+
+class KickUser(Message):
+	_keys = {
+		'TargetIP': U8,
+		'TargetPort': U16,
+		'AgentID': Uuid,
+		'SessionID': Uuid,
+		'Reason': Variable2,
+	}
+
+@classmethod
+def _from_bytes(cls: Message, data: bytes):
+	"""Parses packet bytes according to message fields."""
+	def unpack_sequence(buffer: bytes, *args):
+		"""Unpacks bytes from buffer according to struct format strings"""
+		out = []
+		offset = 0
+		last_val = None
+		for format in map(str, args):
+			# print(f'FORMAT {format:<4}', 'AHEAD', zerocode.byte2hex(buffer[offset:offset+4]), 'OFFSET', offset)
+			if format == Variable1.format:
+				[length] = struct.unpack_from(U8.format, buffer, offset)
+				# print('VAR1 LENGTH', str(length))
+				[string] = struct.unpack_from(f'{str(length)}s', buffer, offset + 1)
+				out.append((length, string))
+				last_val = None
+				offset += 1 + length
+				continue
+			if format == Variable2.format:
+				[length] = struct.unpack_from(U16.format, buffer, offset)
+				# print('VAR2 LENGTH', str(length))
+				[string] = struct.unpack_from(f'{str(length)}s', buffer, offset + 2)
+				out.append((length, string))
+				last_val = None
+				offset += 2 + length
+				continue
+			if '*' in format and last_val is not None:
+				format = format.replace('*', str(last_val))
+			if format == '0s':
+				out.append(b'')
+				last_val = None
+				continue
+			values = struct.unpack_from(format, buffer, offset)
+			single = len(values) == 1
+			out.append(values[0] if single else values)
+			last_val = values[0] if single else None
+			offset += struct.calcsize(format)
+		return out
+	message = cls()
+	body_byte = 6
+	# print('CLASS', type(message), 'IN', __class__)
+	# print('KEYS', message._keys)
+	# print('VALUES', message._keys.values())
+	formats = [x.format for x in message._keys.values()]
+	# print('FORMATS', formats)
+	if message._zerocoded:
+		data = data[body_byte:]
+		data = zerocode.decode(data)
+		# print(zerocode.byte2hex(data))
+		data = data[message._frequency:]
+		unpacked = unpack_sequence(data, *formats)
+	else:
+		data = data[body_byte + message._frequency:]
+		# print(zerocode.byte2hex(data))
+		unpacked = unpack_sequence(data, *formats)
+
+	# print('UNPACKED', unpacked)
+	for i, (name, impl) in enumerate(message._keys.items()): # assign
+		# print('ASSIGN', name, unpacked[i], impl, '->', impl(unpacked[i]))
+		message[name] = impl(unpacked[i])
+	return message
+
+def _to_bytes(self: Message):
+	out = bytearray()
+
+	# for i, (name, impl) in enumerate(self._keys.items()):
+	for name, impl in self._keys.items():
+		data = self.data(name)
+		# print('CONVERTING', name, impl, data, type(data))
+
+		if isinstance(data.value, (int, float)):
+			out.extend(struct.pack(data.format, data.value))
+		elif isinstance(data, (Variable1, Variable2)):
+			_format = data.format[:2]
+			out.extend(struct.pack(_format, data.length))
+			_format = f'{data.length}s'
+			out.extend(struct.pack(_format, data.value.encode()))
+		elif isinstance(data, Uuid):
+			out.extend(data.bytes)
+		elif isinstance(data, Vector):
+			out.extend(struct.pack(Vector.format, *data.value))
+		elif isinstance(data, Rotation):
+			out.extend(struct.pack(Rotation.format, *data.value))
+		else:
+			raise Exception('Unexpected data', data)
+		# print('\t', type(value))
+		# out.extend(value)
+		# print('BYTESTRING', zerocode.encode(out).hex(' '), '\n')
+
+	if self._zerocoded:
+		out = zerocode.encode(out)
+	return bytes(out)
+
+Message.to_bytes = _to_bytes
+Message.from_bytes = _from_bytes
+
+if __name__ == '__main__':
+	# StartPingCheck
+	data = zerocode.hex2byte('00 00 00 00 38 00 01 01 37 00 00 00')
+	print(m := StartPingCheck.from_bytes(data))
+	print(zerocode.byte2hex(m.to_bytes()))
+	print()
+
+	# ChatFromSimulator "test"
+	data = zerocode.hex2byte('40 00 00 00 33 00 FF FF 00 8B 12 57 75 6C 66 69 65 20 52 65 61 6E 69 6D 61 74 6F 72 00 77 9E 1D 56 55 00 4E 22 94 0A CD 7B 5A DD DB E0 77 9E 1D 56 55 00 4E 22 94 0A CD 7B 5A DD DB E0 01 01 01 2A B0 E3 42 F3 15 A6 41 FD 8B BC 41 05 00 74 65 73 74 00')
+	print(m := ChatFromSimulator.from_bytes(data))
+	print(zerocode.byte2hex(m.to_bytes()))
+	print()
+
+	# RegionHandshake
+	# NOTE: TO_BYTES CONVERSION MISSING LAST 78 BYTES
+	data = zerocode.hex2byte('C0 00 00 00 02 00 FF FF 00 01 94 26 82 90 5C 15 08 46 69 64 65 6C 69 73 00 01 02 64 28 B1 50 71 47 2F 9C DB E2 85 CC 39 DA 9E 00 01 CD CC A0 41 00 04 FB FE A8 13 09 AD 3D 92 3A DD 36 DC 7E BB 13 47 9C 43 4A 43 D5 D8 A3 DD B6 24 41 67 82 38 34 78 AB B7 83 E6 3E 93 26 C0 24 8A 24 76 66 85 5D A3 17 9C DA BD 39 8A 9B 6B 13 91 4D C3 33 BA 32 1F BE B1 69 C7 11 EA FF F2 EF E5 0F 24 DC 88 1D F2 CB 1C BC 94 17 46 88 17 AA 35 9E 0A 50 4C 89 FA F3 1A AE 95 84 09 97 94 F7 C8 59 35 13 62 6C 77 DB A2 21 E5 81 35 19 E9 94 7C 03 4F 3E DF A1 C9 DB A2 21 E5 81 35 19 E9 94 7C 03 4F 3E DF A1 C9 00 02 30 41 00 02 A0 41 00 02 A0 41 00 02 A0 41 00 02 A0 41 00 02 0C 42 00 02 0C 42 00 02 0C 42 BD E2 D4 99 11 35 49 9C 82 32 C2 D6 8E 00 01 8C AC B3 03 00 02 01 00 03 0F 61 77 73 2D 75 73 2D 77 65 73 74 2D 32 61 00 01 04 32 32 39 00 01 13 45 73 74 61 74 65 20 2F 20 48 6F 6D 65 73 74 65 61 64 00 01 01 26 82 90 5C 00 04 01 00 07')
+	print(m := RegionHandshake.from_bytes(data))
+	print(zerocode.byte2hex(m.to_bytes()))
+	print()
+
+	# ImprovedInstantMessage
+	# NOTE: TO_BYTES CONVERSION MISSING LAST 4 BYTES (A5 A4 00 02)
+	data = zerocode.hex2byte('C0 00 00 00 3C 00 FF FF 00 01 FE 77 9E 1D 56 55 00 01 4E 22 94 0A CD 7B 5A DD DB E0 00 11 28 C5 EF B6 FC AA 4E D5 9C F1 A6 40 D1 A9 92 72 01 00 03 BD E2 D4 99 11 35 49 9C 82 32 C2 D6 8E 00 01 8C AC 2A B0 E3 42 F3 15 A6 41 FD 8B BC 41 00 02 5F 5B F2 E0 A9 AA 00 01 F7 08 FB 6B 3B 8B 74 49 92 00 04 12 57 75 6C 66 69 65 20 52 65 61 6E 69 6D 61 74 6F 72 00 01 05 00 01 74 65 73 74 00 01 01 00 02 A5 A4 00 02')
+	print(m := ImprovedInstantMessage.from_bytes(data))
+	print(zerocode.byte2hex(m.to_bytes()))
+	print()
+
+	data = zerocode.hex2byte('C0 00 00 0F BB 00 FF FF 00 01 FE 77 9E 1D 56 55 00 01 4E 22 94 0A CD 7B 5A DD DB E0 D6 D5 43 A0 A5 5E 43 6A A3 DE 58 3D 4C C5 25 25 00 01 8B 84 B5 DC B5 70 4A 77 93 05 3B A3 7A E0 C8 A9 00 20 01 00 01 FC 1A A8 8A E0 70 04 55 07 0F F6 D8 20 3D 13 49 00 04 12 57 75 6C 66 69 65 20 52 65 61 6E 69 6D 61 74 6F 72 00 01 0F 00 01 74 68 69 73 20 69 73 20 61 20 74 65 73 74 00 01 01 00 02')
+	# print('UNENCODED', zerocode.byte2hex(zerocode.decode(data[6:])))
+	print(m := ImprovedInstantMessage.from_bytes(data))
+	print(zerocode.byte2hex(m.to_bytes()))
+	print()

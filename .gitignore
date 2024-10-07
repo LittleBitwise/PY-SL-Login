@@ -1,0 +1,9 @@
+__pycache__
+unused
+
+debug.py
+test.py
+
+*.log
+*.msg
+*.txt
