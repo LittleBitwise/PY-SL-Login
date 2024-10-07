@@ -1,5 +1,6 @@
-import struct
 import parser.zerocode as zerocode
+import struct
+
 from .types import *
 
 

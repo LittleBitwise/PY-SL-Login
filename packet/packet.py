@@ -1,11 +1,12 @@
 import builtins
-import struct
 import parser.zerocode as zerocode  # local
-import packet  # self
-from xmlrpc.client import ServerProxy
-from socket import socket, AF_INET, SOCK_DGRAM
+import struct
 from hashlib import md5
+from socket import AF_INET, SOCK_DGRAM, socket
 from uuid import UUID
+from xmlrpc.client import ServerProxy
+
+import packet
 
 
 def is_zerocoded(input: bytes) -> builtins.bool:

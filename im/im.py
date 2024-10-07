@@ -1,9 +1,11 @@
-from typing import NamedTuple
+import parser.zerocode as zerocode  # local
 from enum import IntEnum
 from time import time
-from uuid import UUID, uuid4 as generate_uuid
-import packet as packet, parser.zerocode as zerocode  # local
+from typing import NamedTuple
+from uuid import UUID
+from uuid import uuid4 as generate_uuid
 
+import packet
 
 # Instant messages
 

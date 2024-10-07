@@ -1,6 +1,6 @@
-from uuid import UUID
 from pprint import pformat as pretty
 from typing import Self
+from uuid import UUID
 
 
 class Format:

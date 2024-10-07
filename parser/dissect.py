@@ -1,4 +1,7 @@
-import parser.zerocode, parser.template, packet
+import parser.template
+import parser.zerocode
+
+import packet
 
 
 def parse():
