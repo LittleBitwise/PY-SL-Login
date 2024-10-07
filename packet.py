@@ -220,22 +220,41 @@ def unpack_sequence(buffer, *args) -> list:
 	A previously unpacked value can be inserted into the next format string replacing `*`.
 	Format strings resulting in multiple values are grouped as `tuple`.
 	"""
+	def unpack_variable(buffer: bytes, format: str, offset: int) -> list:
+		if (i := format.find('*')) != -1:
+			first = format[0:i]
+			v1 = struct.unpack_from(first, buffer, offset)
+			second = str(v1[0]) + format[i+1:]
+			v2 = struct.unpack_from(second, buffer, offset + struct.calcsize(first))
+			return v1 + v2
+		else:
+			return struct.unpack_from(format, buffer, offset)
+
 	out = []
 	offset = 0
 	last_val = None
 	for format in map(str, args):
-		if '*' in format and last_val is not None:
-			format = format.replace('*', str(last_val))
-		if format == '0s':
-			out.append(b'')
-			last_val = None
-			continue
+		# print('LOOP', format)
+		if '*' in format:
+			if last_val is not None:
+				format = format.replace('*', str(last_val))
+				if format == '0s':
+					out.append(b'')
+					last_val = None
+					continue
+			elif format in ['<B*s', '<H*s']:
+				values = unpack_variable(buffer, format, offset)
+				format = format.replace('*', str(values[0]))
+				# print('UNPACKED VARIABLE', format, values)
+				# print('UNPACKED BYTES', struct.calcsize(format))
 		else:
 			values = struct.unpack_from(format, buffer, offset)
-			single = len(values) == 1
-			out.append(values[0] if single else values)
-			last_val = values[0] if single else None
-			offset += struct.calcsize(format)
+		single = len(values) == 1
+		# print(f'offset {offset:<4} format {format:<4} ahead {zerocode.byte2hex(buffer[offset:offset+4]):<11} {values[0] if single else values}')
+		out.append(values[0] if single else values)
+		last_val = values[0] if single else None
+		# print('ADDING TO OFFSET', struct.calcsize(format))
+		offset += struct.calcsize(format)
 	return out
 
 def pack_sequence(*args) -> bytes:
@@ -254,6 +273,7 @@ def pack_sequence(*args) -> bytes:
 			out.extend(struct.pack(format, *value))
 		else:
 			value = value.encode() if isinstance(value, str) else value
+			# print(f'format {format}:', type(value), value)
 			out.extend(struct.pack(format, value))
 		last_val = value
 	return bytes(out)

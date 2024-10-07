@@ -214,3 +214,9 @@ def compute_session_id(dialog: int, agent_id: bytes, other_agent_id: bytes) -> b
 	a = int.from_bytes(agent_id)
 	b = int.from_bytes(other_agent_id)
 	return UUID(int = a ^ b).bytes
+
+if __name__ == '__main__':
+	print(compute_session_id(
+		Dialog.IM,
+		packet.uuid.from_string('28c5efb6-fcaa-4ed5-9cf1-a640d1a99272'),
+		packet.uuid.from_string('779e1d56-5500-4e22-940a-cd7b5adddbe0')))
