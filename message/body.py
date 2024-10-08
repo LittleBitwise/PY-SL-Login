@@ -1,7 +1,7 @@
 import struct
 from parser import zerocode
 
-from messages.types import (  # NOQA
+from message.type import (  # NOQA
     F32,
     F64,
     S8,
