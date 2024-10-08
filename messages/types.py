@@ -24,16 +24,16 @@ class Format:
 
 
 # fmt: off
-class U8(Format):  format = "<B"; size = 1; zero = b"\x00" * size;
-class S8(Format):  format = "<b"; size = 1; zero = b"\x00" * size;
-class U16(Format): format = "<H"; size = 2; zero = b"\x00" * size;
-class S16(Format): format = "<h"; size = 2; zero = b"\x00" * size;
-class U32(Format): format = "<I"; size = 4; zero = b"\x00" * size;
-class S32(Format): format = "<i"; size = 4; zero = b"\x00" * size;
-class F32(Format): format = "<f"; size = 4; zero = b"\x00" * size;
-class U64(Format): format = "<q"; size = 8; zero = b"\x00" * size;
-class S64(Format): format = "<Q"; size = 8; zero = b"\x00" * size;
-class F64(Format): format = "<d"; size = 8; zero = b"\x00" * size;
+class U8(Format):  format = "<B"; size = 1; zero = b"\x00" * size
+class S8(Format):  format = "<b"; size = 1; zero = b"\x00" * size
+class U16(Format): format = "<H"; size = 2; zero = b"\x00" * size
+class S16(Format): format = "<h"; size = 2; zero = b"\x00" * size
+class U32(Format): format = "<I"; size = 4; zero = b"\x00" * size
+class S32(Format): format = "<i"; size = 4; zero = b"\x00" * size
+class F32(Format): format = "<f"; size = 4; zero = b"\x00" * size
+class U64(Format): format = "<q"; size = 8; zero = b"\x00" * size
+class S64(Format): format = "<Q"; size = 8; zero = b"\x00" * size
+class F64(Format): format = "<d"; size = 8; zero = b"\x00" * size
 # fmt: on
 
 
