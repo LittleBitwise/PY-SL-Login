@@ -143,6 +143,19 @@ class RegionHandshake(Message):
         "TerrainHeightRange01": F32,
         "TerrainHeightRange10": F32,
         "TerrainHeightRange11": F32,
+        "RegionID": Uuid,
+        "CPUClassID": S32,
+        "CPURatio": S32,
+        "ColoName": Variable1,
+        "ProductSKU": Variable1,
+        "ProductName": Variable1,
+        "RegionInfo4": (
+            Variable1,
+            {  # repeat following block N times
+                "RegionFlagsExtended": U64,
+                "RegionProtocols": U64,
+            },
+        ),
     }
 
 
@@ -228,7 +241,17 @@ def _from_bytes(cls: Message, data: bytes):
     # print('CLASS', type(message), 'IN', __class__)
     # print('KEYS', message._keys)
     # print('VALUES', message._keys.values())
-    formats = [x.format for x in message._keys.values()]
+    formats = []
+    for x in message._keys.values():
+        if not isinstance(x, tuple):
+            formats.append(x.format)
+        else:
+            repeat: Variable1 = x[0]
+            raise Exception("TODO: solve for variable length blocks")
+            block: dict = x[1]
+            for _ in range(repeat):
+                for y in block.values():
+                    formats.append(y.format)
     # print('FORMATS', formats)
     if message._zerocoded:
         data = data[body_byte:]
@@ -254,7 +277,7 @@ def _to_bytes(self: Message):
     # for i, (name, impl) in enumerate(self._keys.items()):
     for name, impl in self._keys.items():
         data = self.data(name)
-        # print('CONVERTING', name, impl, data, type(data))
+        # print("CONVERTING", name, data.value, impl)
 
         if isinstance(data.value, (int, float)):
             out.extend(struct.pack(data.format, data.value))
@@ -273,7 +296,6 @@ def _to_bytes(self: Message):
             raise Exception("Unexpected data", data)
         # print('\t', type(value))
         # out.extend(value)
-        # print('BYTESTRING', zerocode.encode(out).hex(' '), '\n')
 
     if self._zerocoded:
         out = zerocode.encode(out)
