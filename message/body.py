@@ -175,6 +175,7 @@ class RegionHandshakeReply(Message):
 
 class AgentUpdate(Message):
     _zerocoded = True
+    _frequency = Format.alias("High").size
     _keys = {
         "AgentID": Uuid,
         "SessionID": Uuid,

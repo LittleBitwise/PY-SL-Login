@@ -1,3 +1,4 @@
+from parser import zerocode
 from message.body import Message
 from message.data import *
 import struct
@@ -45,9 +46,6 @@ def _from_bytes(cls: Message, data: bytes):
 
     message = cls()
     body_byte = 6
-    # print('CLASS', type(message), 'IN', __class__)
-    # print('KEYS', message._keys)
-    # print('VALUES', message._keys.values())
     formats = []
     for x in message._keys.values():
         if not isinstance(x, tuple):
@@ -59,19 +57,21 @@ def _from_bytes(cls: Message, data: bytes):
             for _ in range(repeat):
                 for y in block.values():
                     formats.append(y.format)
-    # print('FORMATS', formats)
+    # print("CLASS", type(message))
+    # print("KEYS", message._keys)
+    # print("VALUES", message._keys.values())
+    # print("FORMATS", formats)
     if message._zerocoded:
         data = data[body_byte:]
         data = zerocode.decode(data)
-        # print(zerocode.byte2hex(data))
         data = data[message._frequency :]
+        # print(zerocode.byte2hex(data))
         unpacked = unpack_sequence(data, *formats)
     else:
         data = data[body_byte + message._frequency :]
         # print(zerocode.byte2hex(data))
         unpacked = unpack_sequence(data, *formats)
-
-    # print('UNPACKED', unpacked)
+    # print("UNPACKED", unpacked)
     for i, (name, impl) in enumerate(message._keys.items()):  # assign
         # print('ASSIGN', name, unpacked[i], impl, '->', impl(unpacked[i]))
         message[name] = impl(unpacked[i])
