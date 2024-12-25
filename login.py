@@ -103,14 +103,6 @@ def SendRegionHandshakeReply():
     )
 
 
-class RegionHandshakeReply:
-    pass
-
-
-def SendRegionHandshakeReply():
-    client.send(RegionHandshakeReply.to_bytes())
-
-
 def SendAgentUpdate(control: int = 0):
     client.send(
         packet.header(
@@ -183,14 +175,7 @@ def SendAgentHeightWidth():
         client.agent_id_bytes,
         client.session_id_bytes,
         client.circuit_code_bytes,
-        packet.pack_sequence(
-            packet.u32,
-            0,
-            packet.u16,
-            800,
-            packet.u16,
-            600,
-        ),
+        packet.pack_sequence(packet.u32, 0, packet.u16, 1080, packet.u16, 1920),
     )
 
 
@@ -201,6 +186,35 @@ def SendAgentFOV():
         client.session_id_bytes,
         client.circuit_code_bytes,
         packet.pack_sequence(packet.u32, 0, packet.f32, 6.233185307179586),
+    )
+
+
+def SendAgentThrottle():
+    client.send(
+        packet.header(template.message["AgentThrottle"], client.sequence),
+        client.agent_id_bytes,
+        client.session_id_bytes,
+        client.circuit_code_bytes,
+        packet.pack_sequence(
+            packet.u32,
+            0,
+            packet.variable1,
+            28,
+            packet.f32,
+            8.0815,
+            packet.f32,
+            5.5704,
+            packet.f32,
+            4.3147,
+            packet.f32,
+            4.3147,
+            packet.f32,
+            6.8620,
+            packet.f32,
+            6.8620,
+            packet.f32,
+            4.4073,
+        ),
     )
 
 
@@ -296,8 +310,9 @@ while data := client.receive():
     if message == "RegionHandshake":
         SendRegionHandshakeReply()
         SendAgentUpdate()
-        # SendAgentHeightWidth()
-        # SendAgentFOV()
+        SendAgentThrottle()
+        SendAgentHeightWidth()
+        SendAgentFOV()
 
     if message == "ChatFromSimulator":
         HandleChatFromSimulator(data)
