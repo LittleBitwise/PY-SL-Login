@@ -1,4 +1,6 @@
 from message.body import Message
+from message.data import *
+import struct
 
 
 def _to_bytes(self: Message):

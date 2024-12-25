@@ -1,7 +1,7 @@
 import struct
 from parser import zerocode
 
-from message.type import (  # NOQA
+from message.data import (  # NOQA
     F32,
     F64,
     S8,
@@ -20,6 +20,11 @@ from message.type import (  # NOQA
     Variable2,
     Vector,
 )
+
+
+# This Message class is primarily useful for decoding packet bytes into usable objects.
+# It can of course be used for converting those objects into outgoing bytes.
+# Static packets (such as screen dimensions and FOV) are easily packed directly.
 
 
 class Message:
@@ -193,4 +198,14 @@ class KickUser(Message):
         "AgentID": Uuid,
         "SessionID": Uuid,
         "Reason": Variable2,
+    }
+
+
+class AgentThrottle(Message):
+    _keys = {
+        "AgentID": Uuid,
+        "SessionID": Uuid,
+        "CircuitCode": U32,
+        "GenCounter": U32,
+        "Throttles": Variable1,
     }
